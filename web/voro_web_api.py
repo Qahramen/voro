@@ -526,21 +526,28 @@ def credit_order(order):
 # Uni qayta yozmaymiz — import qilib, o'sha funksiyalarni ishlatamiz.
 # Shunday qilib bot qanday generatsiya qilsa, sayt ham AYNAN shunday qiladi.
 import sys as _sys
-if "/root" not in _sys.path:
+if "/root/bot" not in _sys.path:
     _sys.path.insert(0, "/root/bot")
 
 _bot = None
+_bot_last_try = 0.0
 def _get_bot():
-    """Botni bir marta import qiladi (lazy). Xato bo'lsa None qaytaradi."""
-    global _bot
-    if _bot is None:
-        try:
-            import voro_creator_bot as b
-            _bot = b
-        except Exception as e:
-            print(f"[atlas] bot import xatosi: {e}")
-            _bot = False
-    return _bot or None
+    """Botni lazy import qiladi. Muvaffaqiyatsizlikni DOIMIY keshlamaydi —
+    har 15s da qayta urinadi (deploy paytidagi vaqtinchalik uzilishlarga chidamli)."""
+    global _bot, _bot_last_try
+    if _bot:
+        return _bot
+    now = time.time()
+    if now - _bot_last_try < 15:
+        return None
+    _bot_last_try = now
+    try:
+        import voro_creator_bot as b
+        _bot = b
+        return _bot
+    except Exception as e:
+        print(f"[atlas] bot import xatosi (15s dan keyin qayta urinadi): {e}")
+        return None
 
 
 # Atlas 'tugadi'/'xato' statuslari (bot bilan bir xil bo'lishi uchun botdan olamiz, bo'lmasa default)
