@@ -32506,7 +32506,8 @@ async def reload_pricing_job(context) -> None:
 
 
 # ─────────── Inline tugma ranglari (Bot API 9.4 `style`) ───────────
-# Yashil = modellar, shablonlar bo'limi, generatsiya, to'lov.
+# Yashil = bo'lim/feature tugmalari (modellar, shablonlar, vositalar, elementlar, vagent,
+#          mashhurlar, qo'llanma, balans) + generatsiya + to'lov.
 # Qizil  = orqaga (modellarga qaytish), bekor, o'chirish.
 # Ko'k   = bosh sahifa, resolution, duration, aspect + qolgan hammasi (default).
 # Rangsiz = juda kam (faqat noop / bo'sh joylar).
@@ -32517,11 +32518,13 @@ def _install_button_styles():
         GREEN, RED = set(), set()
         for k in I18N:
             kl = k.lower()
-            if kl.startswith("back"):
+            if kl.startswith("back") or kl.startswith("m_"):
                 continue
             if ("cancel" in kl) or ("delete" in kl):
                 RED.add(k)
             elif ("model" in kl) or ("template" in kl) or ("shablon" in kl) or ("tmpl" in kl) \
+                 or ("tool" in kl) or ("vosit" in kl) or ("element" in kl) or ("vagent" in kl) \
+                 or ("popular" in kl) or ("mashhur" in kl) or ("guide" in kl) or ("qollanma" in kl) \
                  or ("create" in kl) or ("regenerate" in kl) or ("start_creat" in kl) or (kl == "start_btn") \
                  or ("topup" in kl) or ("balan" in kl) or ("tarif" in kl) or ("premium" in kl) or ("stars" in kl) \
                  or kl.startswith("buy") or kl.startswith("pay") \
@@ -32536,6 +32539,12 @@ def _install_button_styles():
                 if v:
                     _TEXT_STYLE[v] = st
 
+        # Yashil callback prefikslar (bo'lim/feature + to'lov + model/shablon)
+        _GREEN_CB = ("MDL:", "cat:", "tmpl", "templates", "video_templates",
+                     "tools", "elements", "element", "vagent", "popular", "guide",
+                     "buy", "PKG", "pay", "topup", "add_element", "video_from_element",
+                     "my_element")
+
         def _sfor(text, cb):
             cbs = cb if isinstance(cb, str) else ""
             if cbs == "noop" or cbs == "":
@@ -32543,9 +32552,8 @@ def _install_button_styles():
             # QIZIL: orqaga / modellarga qaytish / bekor / o'chirish
             if cbs.startswith("back") or _TEXT_STYLE.get(text) == "danger":
                 return "danger"
-            # YASHIL: modellar / shablonlar / generatsiya / to'lov
-            if cbs.startswith(("MDL:", "tmpl", "templates", "video_templates",
-                               "buy", "PKG", "pay", "topup")):
+            # YASHIL: bo'lim/feature + generatsiya + to'lov
+            if cbs.startswith(_GREEN_CB):
                 return "success"
             if _TEXT_STYLE.get(text) == "success":
                 return "success"
@@ -32569,7 +32577,7 @@ def _install_button_styles():
         InlineKeyboardButton.__init__ = _init
         InlineKeyboardButton._voro_styled = True
         try:
-            logger.info("Inline tugma ranglari: %d matn-qoida | yashil=model/shablon/gen/tolov, qizil=orqaga/bekor, kok=home/res/dur+default",
+            logger.info("Inline tugma ranglari: %d matn-qoida | yashil=bolim/gen/tolov, qizil=orqaga/bekor, kok=home/res/dur+default",
                         len(_TEXT_STYLE))
         except Exception:
             pass
