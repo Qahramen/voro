@@ -527,7 +527,7 @@ def credit_order(order):
 # Shunday qilib bot qanday generatsiya qilsa, sayt ham AYNAN shunday qiladi.
 import sys as _sys
 if "/root" not in _sys.path:
-    _sys.path.insert(0, "/root")
+    _sys.path.insert(0, "/root/bot")
 
 _bot = None
 def _get_bot():
@@ -2039,7 +2039,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_USERS_JSON = os.getenv("BOT_USERS_JSON", "/root/users.json")  # lazy migration manbasi
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")  # Mini App prompt enhance uchun
 ENHANCE_MODEL = "claude-haiku-4-5-20251001"
-BOT_FILE = os.getenv("BOT_FILE", "/root/voro_creator_bot.py")
+BOT_FILE = os.getenv("BOT_FILE", "/root/bot/voro_creator_bot.py")
 
 TOOLS_LIST = [
     {
