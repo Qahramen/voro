@@ -279,15 +279,27 @@ lucide-react/dist/esm/lucide-react.js:
     col.insertBefore(wrap, anchor);       // email dan yuqoriga
     try{ google.accounts.id.renderButton(host,{theme:"outline",size:"large",width:300,text:"continue_with",shape:"pill"}); }catch(e){}
   }
+  var _prompted=false;
   ready(function(){
-    try{ google.accounts.id.initialize({client_id:CLIENT_ID, callback:window.__voroGCb}); }catch(e){ return; }
+    try{ google.accounts.id.initialize({client_id:CLIENT_ID, callback:window.__voroGCb,
+      use_fedcm_for_prompt:true, auto_select:false, context:"signin", itp_support:true}); }catch(e){ return; }
+    // Canva uslubi: sayt ochilishida login qilmagan foydalanuvchiga One Tap
+    // kartasi avtomatik chiqadi (sahifa ustida, hech narsa yopilmaydi).
     fetch(API+"/me",{credentials:"include"}).then(function(r){
-      if(r.status===401){ try{ google.accounts.id.prompt(); }catch(e){} }
+      if(r.status===401){ _prompted=true; try{ google.accounts.id.prompt(); }catch(e){} }
     }).catch(function(){});
     var obs=new MutationObserver(function(){
       var pw=document.querySelector('input[type="password"]');
-      if(pw){ makeBtn(pw); }
-      else { var ex=document.getElementById("voro-gbtn"); if(ex){ ex.remove(); } }
+      if(pw){
+        makeBtn(pw);
+        // Login modal ochilganda: hisob tanlash sahifa USTIDA overlay karta sifatida
+        // chiqadi (FedCM) — modal yopilmaydi, sahifa almashmaydi.
+        if(!_prompted){ _prompted=true; try{ google.accounts.id.prompt(); }catch(e){} }
+      }
+      else {
+        var ex=document.getElementById("voro-gbtn"); if(ex){ ex.remove(); }
+        _prompted=false;   // modal yopildi — keyingi ochilishda yana ko'rsatiladi
+      }
     });
     obs.observe(document.body,{childList:true,subtree:true});
   });
