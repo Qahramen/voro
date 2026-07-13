@@ -642,7 +642,11 @@ async def atlas_submit(job) -> str:
             if dur:
                 payload["duration"] = int(dur)
         if image_urls:
-            payload["images"] = image_urls
+            # Atlas i2v birlik "image" (string) kutadi; reference-to-video esa "images" (massiv)
+            if mid.endswith("/image-to-video"):
+                payload["image"] = image_urls[0]
+            else:
+                payload["images"] = image_urls
         print("[gemini] payload:", {k: ([u[:48] for u in v] if isinstance(v, list) else str(v)[:60]) for k, v in payload.items()})
         headers = {
             "Authorization": f"Bearer {b.ATLASCLOUD_API_KEY}",
