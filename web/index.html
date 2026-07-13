@@ -289,39 +289,43 @@ lucide-react/dist/esm/lucide-react.js:
   });
 })();
 </script>
-<!-- Voro reference-upload UX (Apple-style, ramka ichida) -->
+<!-- Voro reference-upload UX (Apple-style, box ichida) -->
 <style>
 @keyframes voroRefShimmer{0%{background-position:-140% 0}100%{background-position:240% 0}}
-@keyframes voroRefReveal{0%{opacity:0;transform:scale(.93)}100%{opacity:1;transform:none}}
-@keyframes voroRefImg{0%{filter:blur(12px) saturate(.55) brightness(.8);transform:scale(1.1)}100%{filter:none;transform:none}}
-/* Yuklanish qatlami — ramka (upload frame) ICHIDA, chiqib keta olmaydi */
+@keyframes voroRefReveal{0%{opacity:0;transform:scale(.9)}100%{opacity:1;transform:none}}
+@keyframes voroRefImg{0%{filter:blur(10px) saturate(.55) brightness(.8);transform:scale(1.12)}100%{filter:none;transform:none}}
+/* Yuklanish qatlami — reference BOX ichida, chiqib keta olmaydi */
 .voroRefLoad{position:absolute;inset:0;z-index:6;border-radius:inherit;overflow:hidden;display:grid;place-items:center;
-  background:rgba(9,10,13,.5);opacity:0;transition:opacity .22s ease;pointer-events:none}
+  background:rgba(9,10,13,.45);opacity:0;transition:opacity .2s ease;pointer-events:none}
 .voroRefLoad.in{opacity:1}
-.voroRefLoad .vbg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(14px) saturate(.5) brightness(.62);transform:scale(1.12)}
-.voroRefLoad .vshine{position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.13) 50%,transparent 65%);background-size:220% 100%;animation:voroRefShimmer 1.35s ease-in-out infinite}
-.voroRefLoad .vring{position:relative;z-index:2;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
-.voroRefLoad .vlbl{position:absolute;bottom:9px;left:0;right:0;text-align:center;font-size:11px;font-weight:700;letter-spacing:.2px;color:rgba(255,255,255,.9);z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-/* Reveal — haqiqiy preview mount bo'lganda avtomatik (o'z joyida, JS-siz) */
-.panel div[style*="84px"][style*="108px"]{animation:voroRefReveal .5s cubic-bezier(.32,.72,0,1) both}
-.panel div[style*="84px"][style*="108px"]>img{animation:voroRefImg .55s cubic-bezier(.32,.72,0,1) both}
+.voroRefLoad .vbg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(9px) saturate(.55) brightness(.6);transform:scale(1.15)}
+.voroRefLoad .vshine{position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.16) 50%,transparent 70%);background-size:220% 100%;animation:voroRefShimmer 1.3s ease-in-out infinite}
+.voroRefLoad .vring{position:relative;z-index:2;filter:drop-shadow(0 1px 4px rgba(0,0,0,.55))}
+/* Reveal — haqiqiy preview mount bo'lganda (JS class qo'shadi, o'lchamdan qat'i nazar) */
+.voroRefIn{animation:voroRefReveal .5s cubic-bezier(.32,.72,0,1) both}
+.voroRefImgIn{animation:voroRefImg .55s cubic-bezier(.32,.72,0,1) both}
 </style>
 <script>
 (function(){
   "use strict";
   if(window.__voroRefUX)return; window.__voroRefUX=true;
   var ACCENT="#2BD4FF", R=15, C=2*Math.PI*R;
-  function ringSvg(){
-    return '<svg width="40" height="40" viewBox="0 0 42 42">'
-      +'<circle cx="21" cy="21" r="'+R+'" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="2.6"/>'
-      +'<circle class="voroRefProg" cx="21" cy="21" r="'+R+'" fill="none" stroke="'+ACCENT+'" stroke-width="2.6" '
+  function ringSvg(sz){
+    return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 42 42">'
+      +'<circle cx="21" cy="21" r="'+R+'" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="3"/>'
+      +'<circle class="voroRefProg" cx="21" cy="21" r="'+R+'" fill="none" stroke="'+ACCENT+'" stroke-width="3" '
       +'stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'" transform="rotate(-90 21 21)"/></svg>';
+  }
+  function reveal(rp){
+    try{ rp.classList.add("voroRefImgIn"); var c=rp.closest("div"); if(c) c.classList.add("voroRefIn"); }catch(e){}
   }
   function startLoad(panel, frame, url, doRevoke){
     try{ if(frame.querySelector(".voroRefLoad"))return; }catch(e){}
     try{ if(getComputedStyle(frame).position==="static") frame.style.position="relative"; }catch(e){}
+    var sz=frame.getBoundingClientRect().width||64;
+    var rsz=Math.max(24,Math.min(38,Math.round(sz*0.52)));
     var layer=document.createElement("div"); layer.className="voroRefLoad";
-    layer.innerHTML='<div class="vbg"></div><div class="vshine"></div><div class="vring">'+ringSvg()+'</div><div class="vlbl">Yuklanmoqda…</div>';
+    layer.innerHTML='<div class="vbg"></div><div class="vshine"></div><div class="vring">'+ringSvg(rsz)+'</div>';
     try{ layer.querySelector(".vbg").style.backgroundImage='url("'+url+'")'; }catch(e){}
     frame.appendChild(layer);
     requestAnimationFrame(function(){ layer.classList.add("in"); });
@@ -335,17 +339,23 @@ lucide-react/dist/esm/lucide-react.js:
     try{ [].slice.call(panel.querySelectorAll("img")).forEach(function(im){var s=im.currentSrc||im.getAttribute("src")||""; if(/^https?:/.test(s)) seen[s]=1;}); }catch(e){}
     function real(){ try{ return [].slice.call(panel.querySelectorAll("img")).filter(function(im){var s=im.currentSrc||im.getAttribute("src")||""; return /^https?:/.test(s)&&!seen[s];})[0]; }catch(e){ return null; } }
     function cleanup(){ try{layer.remove();}catch(e){} try{obs.disconnect();}catch(e){} if(doRevoke){try{URL.revokeObjectURL(url);}catch(e){}} clearTimeout(to); }
-    function finish(){ if(done)return; done=true; setRing(100); layer.classList.remove("in"); setTimeout(cleanup,240); }
+    function finish(){ if(done)return; done=true; setRing(100); var rp=real(); if(rp) reveal(rp); layer.classList.remove("in"); setTimeout(cleanup,240); }
     var obs=new MutationObserver(function(){ if(real()) finish(); });
     try{ obs.observe(panel,{childList:true,subtree:true,attributes:true,attributeFilter:["src"]}); }catch(e){}
     to=setTimeout(function(){ if(!done){ layer.classList.remove("in"); setTimeout(cleanup,240); } }, 45000);
     if(real()) finish();
     return {finish:finish, cleanup:cleanup};
   }
-  function frameOf(panel, inp){
-    // Reference "ramkasi": panel ichidagi katta upload tugmasi (yoki preview konteyneri), bo'lmasa panel
+  function frameOf(panel){
+    // Reference "box": panel ichidagi kichik ~kvadrat tugma (rasm-siz). Bo'lmasa panel.
     try{
-      var btns=[].slice.call(panel.querySelectorAll("button")).filter(function(b){return b.offsetWidth>110&&b.offsetHeight>44&&!b.querySelector("img");});
+      var btns=[].slice.call(panel.querySelectorAll("button")).filter(function(b){
+        if(b.querySelector("img"))return false;
+        var r=b.getBoundingClientRect(), w=r.width, h=r.height;
+        if(w<36||h<36||w>220||h>220)return false;
+        var ar=w/h; return ar>0.72 && ar<1.4;
+      });
+      btns.sort(function(a,b){ return a.getBoundingClientRect().width - b.getBoundingClientRect().width; });
       if(btns[0]) return btns[0];
     }catch(e){}
     return panel;
@@ -359,25 +369,27 @@ lucide-react/dist/esm/lucide-react.js:
       if(!f||!/^image\//.test(f.type||""))return;
       var panel=inp.closest(".panel")||inp.parentElement; if(!panel)return;
       var url; try{url=URL.createObjectURL(f);}catch(e2){return;}
-      startLoad(panel, frameOf(panel,inp), url, true);
+      startLoad(panel, frameOf(panel), url, true);
     }catch(err){}
   }, true);
 
-  // Demo (haqiqiy yuklashsiz ko'rish uchun)
+  // Demo (haqiqiy yuklashsiz ko'rish uchun) — 64x64 box
   window.__voroRefDemo=function(imgUrl){
     imgUrl=imgUrl||(document.querySelector("img")&&document.querySelector("img").src);
     var panel=document.createElement("div"); panel.className="panel";
-    panel.style.cssText="position:fixed;left:60px;top:150px;width:300px;z-index:99991;padding:14px;background:#12141a;border-radius:16px";
-    var frame=document.createElement("button");
-    frame.style.cssText="width:100%;height:96px;border-radius:15px;background:#1b1e26;display:block";
-    panel.appendChild(frame); document.body.appendChild(panel);
+    panel.style.cssText="position:fixed;left:70px;top:170px;width:300px;z-index:99991;padding:16px;background:#12141a;border-radius:16px;border:1px solid rgba(255,255,255,.08)";
+    var lbl=document.createElement("div"); lbl.textContent="REFERENCE IMAGE"; lbl.style.cssText="font-size:12px;color:#8b93a3;margin-bottom:12px;font-weight:700;letter-spacing:.6px"; panel.appendChild(lbl);
+    var row=document.createElement("div"); row.style.cssText="display:flex;gap:10px"; panel.appendChild(row);
+    var frame=document.createElement("button"); frame.className="tap";
+    frame.style.cssText="width:64px;height:64px;border-radius:13px;background:#1b1e26;border:1px dashed rgba(255,255,255,.15);color:#5b6472;font-size:22px;display:grid;place-items:center";
+    frame.textContent="+"; row.appendChild(frame); document.body.appendChild(panel);
     startLoad(panel, frame, imgUrl, false);
     setTimeout(function(){
-      try{frame.remove();}catch(e){}
+      frame.textContent="";
       var c=document.createElement("div");
-      c.setAttribute("style","position:relative;width:84px;height:108px;border-radius:13px;overflow:hidden;background:#000;flex:none");
+      c.setAttribute("style","position:relative;width:64px;height:64px;border-radius:13px;overflow:hidden;background:#000");
       var im=document.createElement("img"); im.src=imgUrl; im.setAttribute("style","width:100%;height:100%;object-fit:cover");
-      c.appendChild(im); panel.appendChild(c);
+      c.appendChild(im); frame.appendChild(c);
     }, 2000);
     setTimeout(function(){ try{panel.remove();}catch(e){} }, 5200);
     return "demo boshlandi";
