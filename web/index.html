@@ -272,7 +272,11 @@ lucide-react/dist/esm/lucide-react.js:
     or.textContent="— yoki —";
     or.style.cssText="font-size:12px;opacity:.55";
     wrap.appendChild(or);
-    col.insertBefore(wrap, pill);         // parol maydonidan yuqoriga, alohida qator
+    // Google tugmasi email maydonidan YUQORIGA (formaning eng boshiga)
+    var emailInp=col.querySelector('input[type="email"],input[name="email"],input[placeholder*="mail" i]');
+    var anchor=col.firstChild;
+    if(emailInp){ var ew=emailInp.closest("div"); if(ew&&ew.parentElement===col) anchor=ew; }
+    col.insertBefore(wrap, anchor);       // email dan yuqoriga
     try{ google.accounts.id.renderButton(host,{theme:"outline",size:"large",width:300,text:"continue_with",shape:"pill"}); }catch(e){}
   }
   ready(function(){
