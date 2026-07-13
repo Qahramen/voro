@@ -32506,8 +32506,10 @@ async def reload_pricing_job(context) -> None:
 
 
 # ─────────── Inline tugma ranglari (Bot API 9.4 `style`) ───────────
-# Yashil=modellar+to'lov, Ko'k=generatsiya+orqaga+default, Qizil=shablonlar+bekor/o'chirish.
-# Rangsiz FAQAT: bosh sahifa (home), resolution (RES:), duration (D:), aspect (ASP:).
+# Yashil = modellar, shablonlar bo'limi, generatsiya, to'lov.
+# Qizil  = orqaga (modellarga qaytish), bekor, o'chirish.
+# Ko'k   = bosh sahifa, resolution, duration, aspect + qolgan hammasi (default).
+# Rangsiz = juda kam (faqat noop / bo'sh joylar).
 def _install_button_styles():
     try:
         if getattr(InlineKeyboardButton, "_voro_styled", False):
@@ -32517,12 +32519,13 @@ def _install_button_styles():
             kl = k.lower()
             if kl.startswith("back"):
                 continue
-            if ("template" in kl) or ("shablon" in kl) or ("tmpl" in kl) \
-               or ("cancel" in kl) or ("delete" in kl):
+            if ("cancel" in kl) or ("delete" in kl):
                 RED.add(k)
-            elif ("model" in kl) or ("topup" in kl) or ("balan" in kl) \
-               or ("tarif" in kl) or ("premium" in kl) or ("stars" in kl) \
-               or kl.startswith("buy") or kl.startswith("pay"):
+            elif ("model" in kl) or ("template" in kl) or ("shablon" in kl) or ("tmpl" in kl) \
+                 or ("create" in kl) or ("regenerate" in kl) or ("start_creat" in kl) or (kl == "start_btn") \
+                 or ("topup" in kl) or ("balan" in kl) or ("tarif" in kl) or ("premium" in kl) or ("stars" in kl) \
+                 or kl.startswith("buy") or kl.startswith("pay") \
+                 or kl in ("yes_use", "confirm_prompt"):
                 GREEN.add(k)
         _TEXT_STYLE = {}
         for k in GREEN | RED:
@@ -32535,21 +32538,19 @@ def _install_button_styles():
 
         def _sfor(text, cb):
             cbs = cb if isinstance(cb, str) else ""
-            # RANGSIZ: resolution / duration / aspect / bosh sahifa
-            if cbs.startswith(("RES:", "D:", "ASP:")) or cbs == "home" or cbs.startswith("home:"):
-                return None
-            st = _TEXT_STYLE.get(text)
-            if st:
-                return st
-            if cbs.startswith("MDL:"):
-                return "success"                                   # model tanlash — yashil
-            if cbs.startswith(("tmpl", "templates", "video_templates")):
-                return "danger"                                    # shablonlar — qizil
-            if cbs.startswith(("buy", "PKG", "pay", "topup")):
-                return "success"                                   # to'lov — yashil
-            if cbs.startswith("back"):
-                return "primary"                                   # orqaga — ko'k
-            return "primary"                                       # default — ko'k (generatsiya va h.k.)
+            if cbs == "noop" or cbs == "":
+                return None                                         # rangsiz — juda kam
+            # QIZIL: orqaga / modellarga qaytish / bekor / o'chirish
+            if cbs.startswith("back") or _TEXT_STYLE.get(text) == "danger":
+                return "danger"
+            # YASHIL: modellar / shablonlar / generatsiya / to'lov
+            if cbs.startswith(("MDL:", "tmpl", "templates", "video_templates",
+                               "buy", "PKG", "pay", "topup")):
+                return "success"
+            if _TEXT_STYLE.get(text) == "success":
+                return "success"
+            # KO'K: bosh sahifa, resolution, duration, aspect + qolgan hammasi
+            return "primary"
 
         _orig = InlineKeyboardButton.__init__
 
@@ -32568,7 +32569,7 @@ def _install_button_styles():
         InlineKeyboardButton.__init__ = _init
         InlineKeyboardButton._voro_styled = True
         try:
-            logger.info("Inline tugma ranglari o'rnatildi: %d matn-qoida (yashil/qizil), qolgani ko'k, params rangsiz",
+            logger.info("Inline tugma ranglari: %d matn-qoida | yashil=model/shablon/gen/tolov, qizil=orqaga/bekor, kok=home/res/dur+default",
                         len(_TEXT_STYLE))
         except Exception:
             pass
