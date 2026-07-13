@@ -1,0 +1,143 @@
+{
+    "_comment": "Voro Creator Bot — narx konfiguratsiyasi. Bot 5 daqiqada qayta o'qiydi. Restart shart emas.",
+    "_formula": "kredit = ceil(atlas_usd * MARGIN / CREDIT_PRICE_USD). Video: atlas_usd = model_usd_per_sec * duration. Rasm: atlas_usd = model_cost_usd[model][resolution].",
+    "admin_contact": "vorouz",
+    "credit_price_usd": 0.042,
+    "star_value": 0.0091,
+    "margin": 2.5,
+    "free_starter_tangacha": 10,
+    "daily_bonus_amount": 2,
+    "referral_percent": 10,
+    "template_costs": {
+        "_comment": "fotosessiya: 8 kredit (1-bosqich). fotosessiya_enhanced: 12 kredit (2-bosqich, faqat ma'lumot uchun). Asosiy toggle: 'fotosessiya_enhance_first' (true/false).",
+        "fotosessiya": 8,
+        "fotosessiya_enhanced": 12
+    },
+    "star_packages": [
+        {
+            "tangacha": 20,
+            "bonus": 0,
+            "stars": 99,
+            "emoji": "🌱",
+            "label": "Start",
+            "desc": "Sinab ko'rish uchun",
+            "badge": ""
+        },
+        {
+            "tangacha": 60,
+            "bonus": 10,
+            "stars": 249,
+            "emoji": "🔥",
+            "label": "Popular",
+            "desc": "Eng mashhur paket",
+            "badge": "🔥"
+        },
+        {
+            "tangacha": 150,
+            "bonus": 30,
+            "stars": 549,
+            "emoji": "⚡",
+            "label": "Pro",
+            "desc": "Jiddiy ijodkorlar",
+            "badge": ""
+        },
+        {
+            "tangacha": 400,
+            "bonus": 120,
+            "stars": 1299,
+            "emoji": "💎",
+            "label": "Biznes",
+            "desc": "Katta hajmli loyihalar",
+            "badge": ""
+        }
+    ],
+    "model_cost_usd": {
+        "_comment_video": "Video: float = $ per sekund (resolution ta'sir etmaydi)",
+        "google/veo3.1/text-to-video": 0.4,
+        "google/veo3.1-fast/image-to-video": 0.09,
+        "google/veo3.1-lite/image-to-video": 0.05,
+        "google/veo3.1-lite/start-end-frame-to-video": 0.05,
+        "google/veo3.1/reference-to-video": 0.4,
+        "bytedance/seedance-2.0/text-to-video":      {"480p": 0.1124928, "720p": 0.24192, "1080p": {"rate": 0.54432, "margin": 1.5}, "1440p": {"rate": 0.774144, "margin": 1.5}, "4K": {"rate": 1.2410496, "margin": 1.5}},
+        "bytedance/seedance-2.0/image-to-video":     {"480p": 0.1124928, "720p": 0.24192, "1080p": {"rate": 0.54432, "margin": 1.5}, "1440p": {"rate": 0.774144, "margin": 1.5}, "4K": {"rate": 1.2410496, "margin": 1.5}},
+        "bytedance/seedance-2.0/reference-to-video": {"480p": 0.1124928, "720p": 0.24192, "1080p": {"rate": 0.54432, "margin": 1.5}, "1440p": {"rate": 0.774144, "margin": 1.5}, "4K": {"rate": 1.2410496, "margin": 1.5}},
+        "bytedance/seedance-2.0-fast/text-to-video": 0.081,
+        "bytedance/seedance-2.0-fast/reference-to-video": 0.081,
+        "bytedance/seedance-v1.5-pro/text-to-video": 0.047,
+        "bytedance/seedance-v1.5-pro/image-to-video": 0.047,
+        "bytedance/seedance-v1.5-pro/image-to-video-fast": 0.047,
+        "kwaivgi/kling-v3.0-std/image-to-video": 0.071,
+        "kwaivgi/kling-v2.6-pro/image-to-video": 0.08,
+        "kwaivgi/kling-video-o3-pro/video-edit": 0.15,
+        "kwaivgi/kling-v2.6-std/motion-control": 0.1,
+        "kwaivgi/kling-v2.5-turbo-pro/image-to-video": 0.07,
+        "alibaba/wan-2.7/text-to-video": 0.07,
+        "alibaba/wan-2.7/image-to-video": 0.07,
+        "minimax/hailuo-2.3/t2v-standard": 0.07,
+        "minimax/hailuo-2.3/fast": 0.07,
+        "xai/grok-imagine-video-v1.5/image-to-video": 0.096,
+        "alibaba/happyhorse-1.0/text-to-video": 0.14,
+        "vidu/q3/reference-to-video": 0.042,
+        "atlascloud/infinitetalk": 0.05,
+        "_comment_image": "Rasm: dict = {resolution: $}",
+        "google/nano-banana-2/text-to-image": {
+            "1k": 0.04,
+            "2k": 0.06,
+            "4k": 0.08
+        },
+        "google/nano-banana-2/edit": {
+            "1k": 0.04,
+            "2k": 0.06,
+            "4k": 0.08
+        },
+        "google/nano-banana-pro/edit": {
+            "1k": 0.06,
+            "2k": 0.09,
+            "4k": 0.12
+        },
+        "openai/gpt-image-2/text-to-image": {
+            "low": 0.011,
+            "medium": 0.042,
+            "high": 0.167
+        },
+        "bytedance/seedream-v5.0-lite": {
+            "1k": 0.04,
+            "2k": 0.06,
+            "4k": 0.09
+        },
+        "alibaba/wan-2.7/text-to-image": {
+            "512": 0.013,
+            "1024": 0.026,
+            "2048": 0.052
+        },
+        "alibaba/wan-2.7-pro/text-to-image": {
+            "512": 0.038,
+            "1024": 0.075,
+            "2048": 0.15
+        },
+        "xai/grok-imagine-image-quality/text-to-image": {
+            "1k": 0.06,
+            "2k": 0.12
+        },
+        "qwen/qwen-image-2.0/text-to-image": {
+            "1k": 0.028,
+            "2k": 0.042
+        },
+        "black-forest-labs/flux-1.1-pro": {
+            "1k": 0.05,
+            "2k": 0.075,
+            "4k": 0.12
+        },
+        "black-forest-labs/flux-kontext-max": {
+            "1k": 0.08,
+            "2k": 0.12,
+            "4k": 0.18
+        },
+        "bytedance/seedream-v4.5/text-to-image": {
+            "1k": 0.04,
+            "2k": 0.06,
+            "4k": 0.09
+        }
+    },
+    "fotosessiya_enhance_first": true
+}

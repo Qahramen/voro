@@ -1,0 +1,12 @@
+.env
+*.db
+*.sqlite3
+venv/
+__pycache__/
+uploads/
+media/
+results/
+*.bak*
+*.log
+history.json
+pending_jobs.json
