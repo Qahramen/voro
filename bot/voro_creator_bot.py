@@ -32505,6 +32505,68 @@ async def reload_pricing_job(context) -> None:
         logging.warning("reload_pricing_job: pricing.json o'qilmadi — avvalgi qiymatlar saqlanmoqda")
 
 
+# ─────────── Inline tugma ranglari (Bot API 9.4 `style`) ───────────
+# Tugmalarni matni (I18N kaliti) yoki callback prefiksi bo'yicha avtomatik ranglaydi.
+# Yashil=success (generatsiya/to'lov), Qizil=danger (bekor/o'chirish), Ko'k=primary (tanlash).
+def _install_button_styles():
+    try:
+        if getattr(InlineKeyboardButton, "_voro_styled", False):
+            return
+        _SUCCESS, _DANGER = set(), set()
+        for k in I18N:
+            kl = k.lower()
+            if kl.startswith("back"):
+                continue
+            if ("create" in kl) or ("regenerate" in kl) or (k in (
+                    "start_btn", "start_creating", "topup", "topup_balance",
+                    "topup_credit", "yes_use", "confirm_prompt")):
+                _SUCCESS.add(k)
+            elif ("cancel" in kl) or ("delete" in kl):
+                _DANGER.add(k)
+        _TEXT_STYLE = {}
+        for k in _SUCCESS | _DANGER:
+            e = I18N.get(k) or {}
+            st = "success" if k in _SUCCESS else "danger"
+            for lang in ("uz", "ru", "en"):
+                v = e.get(lang)
+                if v:
+                    _TEXT_STYLE[v] = st
+        _BLUE = ("RES:", "D:", "ASP:", "MDL:", "ref:ok")
+        _orig = InlineKeyboardButton.__init__
+
+        def _init(self, text, *a, **kw):
+            try:
+                if kw.get("style") is None:
+                    st = _TEXT_STYLE.get(text)
+                    if st is None:
+                        cb = kw.get("callback_data")
+                        if isinstance(cb, str) and cb.startswith(_BLUE):
+                            st = "primary"
+                    if st is not None:
+                        kw["style"] = st
+                    elif "style" in kw:
+                        kw.pop("style")
+            except Exception:
+                kw.pop("style", None)
+            _orig(self, text, *a, **kw)
+
+        InlineKeyboardButton.__init__ = _init
+        InlineKeyboardButton._voro_styled = True
+        try:
+            logger.info("Inline tugma ranglari o'rnatildi: %d matn-qoida, %d ko'k-prefiks",
+                        len(_TEXT_STYLE), len(_BLUE))
+        except Exception:
+            pass
+    except Exception as _e:
+        try:
+            logger.warning("Tugma ranglari o'rnatilmadi: %s", _e)
+        except Exception:
+            pass
+
+
+_install_button_styles()
+
+
 def main():
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
