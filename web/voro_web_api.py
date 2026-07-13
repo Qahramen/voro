@@ -75,6 +75,7 @@ CLICK_SECRET_KEY = os.getenv("CLICK_SECRET_KEY", "")
 INTERNAL_KEY = os.getenv("VORO_INTERNAL_KEY", "")  # bot va sayt o'rtasidagi maxfiy kalit
 BOT_USERNAME = os.getenv("BOT_USERNAME", "VoroCreatorBot")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()  # admin panel egasi
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")  # Google Sign-In (ID-token tekshirish)
 
 TOKEN_TTL = 30 * 24 * 3600  # 30 kun
 
@@ -343,7 +344,13 @@ def init_db():
             d.execute("ALTER TABLE users ADD COLUMN telegram_id INTEGER")
         except Exception:
             pass
+        for _col in ("google_sub TEXT", "avatar TEXT"):
+            try:
+                d.execute(f"ALTER TABLE users ADD COLUMN {_col}")
+            except Exception:
+                pass
         d.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_tg ON users(telegram_id)")
+        d.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_sub)")
         d.commit()
 
 
@@ -893,6 +900,51 @@ async def login(request: Request):
         return err("Email yoki parol noto'g'ri", 401)
     resp = JSONResponse(user_json(u))
     set_session(resp, u["id"])
+    return resp
+
+
+@app.post("/auth/google")
+async def auth_google(request: Request):
+    """Google Sign-In: frontend ID-token yuboradi, backend tekshiradi va sessiya beradi."""
+    if not GOOGLE_CLIENT_ID:
+        return err("Google auth sozlanmagan", 503)
+    b = await request.json()
+    cred = str(b.get("credential", ""))
+    if not cred:
+        return err("Google token yo'q")
+    try:
+        from google.oauth2 import id_token as _gid
+        from google.auth.transport import requests as _greq
+        info = _gid.verify_oauth2_token(cred, _greq.Request(), GOOGLE_CLIENT_ID)
+    except Exception as e:
+        print("[google] token tekshirish xatosi:", e)
+        return err("Google token yaroqsiz", 401)
+    if info.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        return err("Google token yaroqsiz", 401)
+    if not info.get("email_verified"):
+        return err("Google email tasdiqlanmagan", 401)
+    sub = str(info["sub"])
+    email = str(info.get("email", "")).strip().lower()
+    name = (info.get("name") or (email.split("@")[0] if email else "Foydalanuvchi"))[:60]
+    avatar = info.get("picture")
+    # 1) google_sub bo'yicha; 2) email bo'yicha (mavjud hisobga bog'lash); 3) yangi hisob
+    u = q("SELECT * FROM users WHERE google_sub=?", (sub,), one=True)
+    if not u and email:
+        u = q("SELECT * FROM users WHERE email=?", (email,), one=True)
+    if u:
+        q("UPDATE users SET google_sub=?, avatar=COALESCE(avatar,?) WHERE id=?",
+          (sub, avatar, u["id"]), commit=True)
+        uid = u["id"]
+    else:
+        salt = os.urandom(16).hex()
+        q("""INSERT INTO users(email,name,pass_hash,salt,balance,created,google_sub,avatar)
+             VALUES(?,?,?,?,?,?,?,?)""",
+          (email or f"g{sub}@voro.local", name, "", salt, SIGNUP_BONUS, int(time.time()), sub, avatar),
+          commit=True)
+        uid = q("SELECT id FROM users WHERE google_sub=?", (sub,), one=True)["id"]
+    u = q("SELECT * FROM users WHERE id=?", (uid,), one=True)
+    resp = JSONResponse(user_json(u))
+    set_session(resp, uid)
     return resp
 
 
