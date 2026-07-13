@@ -11,6 +11,16 @@
   html,body { background:#070809; overflow-x:hidden; }
   #root { min-height:100vh; }
 </style>
+<!-- Voro UI tuzatishlar (bug-fix) -->
+<style>
+/* Logotip V-badge: haddan tashqari qo'pol 14px qora soyani yumshoq soyaga almashtiramiz,
+   chiroyli oq highlight va cyan ichki nurni saqlab qolamiz. */
+.hwrap button.tap > div[style*="rgb(38, 38, 44)"]{
+  box-shadow: 0 2px 6px rgba(0,0,0,.35),
+              rgba(255,255,255,.18) 0 1px 0 inset,
+              rgba(43,212,255,.30) 0 -6px 12px inset !important;
+}
+</style>
 </head>
 <body>
 <div id="root"></div>
