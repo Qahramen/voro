@@ -227,5 +227,51 @@ lucide-react/dist/esm/lucide-react.js:
 */
 
 </script>
+<!-- Google Sign-In (voro) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+(function(){
+  var CLIENT_ID="1054487750719-n3j7h4djmv8i8uof3uvbkce4m4qs1pso.apps.googleusercontent.com";
+  var API="/api";
+  window.__voroGCb=function(resp){
+    fetch(API+"/auth/google",{method:"POST",credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({credential:(resp&&resp.credential)||""})
+    }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+     .then(function(x){ if(x.ok){ location.reload(); } else { alert((x.j&&x.j.error)||"Google kirish xatosi"); } })
+     .catch(function(){ alert("Tarmoq xatosi — qayta urinib ko'ring"); });
+  };
+  function ready(cb){ if(window.google&&google.accounts&&google.accounts.id){cb();} else {setTimeout(function(){ready(cb);},300);} }
+  function makeBtn(pw){
+    if(document.getElementById("voro-gbtn"))return;
+    var pill=pw.parentElement;            // parol input o'ramchasi (flex-row: qulf+input)
+    var col=pill&&pill.parentElement;     // vertikal ustun (email, parol, ...)
+    if(!col)return;
+    var wrap=document.createElement("div");
+    wrap.id="voro-gbtn";
+    wrap.style.cssText="width:100%;flex:0 0 100%;margin:4px 0 10px;display:flex;flex-direction:column;align-items:center;gap:8px";
+    var host=document.createElement("div");
+    wrap.appendChild(host);
+    var or=document.createElement("div");
+    or.textContent="— yoki —";
+    or.style.cssText="font-size:12px;opacity:.55";
+    wrap.appendChild(or);
+    col.insertBefore(wrap, pill);         // parol maydonidan yuqoriga, alohida qator
+    try{ google.accounts.id.renderButton(host,{theme:"outline",size:"large",width:300,text:"continue_with",shape:"pill"}); }catch(e){}
+  }
+  ready(function(){
+    try{ google.accounts.id.initialize({client_id:CLIENT_ID, callback:window.__voroGCb}); }catch(e){ return; }
+    fetch(API+"/me",{credentials:"include"}).then(function(r){
+      if(r.status===401){ try{ google.accounts.id.prompt(); }catch(e){} }
+    }).catch(function(){});
+    var obs=new MutationObserver(function(){
+      var pw=document.querySelector('input[type="password"]');
+      if(pw){ makeBtn(pw); }
+      else { var ex=document.getElementById("voro-gbtn"); if(ex){ ex.remove(); } }
+    });
+    obs.observe(document.body,{childList:true,subtree:true});
+  });
+})();
+</script>
 </body>
 </html>
