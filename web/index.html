@@ -289,96 +289,67 @@ lucide-react/dist/esm/lucide-react.js:
   });
 })();
 </script>
-<!-- Voro reference-upload UX (Apple-style loading & reveal) -->
+<!-- Voro reference-upload UX (Apple-style, ramka ichida) -->
 <style>
 @keyframes voroRefShimmer{0%{background-position:-140% 0}100%{background-position:240% 0}}
-@keyframes voroRefPop{0%{opacity:0;transform:scale(.9)}100%{opacity:1;transform:scale(1)}}
-.voroRefOverlay{position:fixed;z-index:99990;display:flex;align-items:center;gap:12px;pointer-events:none;opacity:0;transition:opacity .2s ease}
-.voroRefOverlay.in{opacity:1}
-.voroRefThumb{position:relative;width:84px;height:108px;border-radius:13px;overflow:hidden;background:#0b0b0e;flex:none;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:voroRefPop .32s cubic-bezier(.32,.72,0,1) both}
-.voroRefThumb img{width:100%;height:100%;object-fit:cover;filter:blur(12px) saturate(.5) brightness(.8);transform:scale(1.12);
-  transition:filter .55s cubic-bezier(.32,.72,0,1),transform .55s cubic-bezier(.32,.72,0,1)}
-.voroRefThumb.done img{filter:none;transform:none}
-.voroRefShine{position:absolute;inset:0;background:linear-gradient(105deg,transparent 32%,rgba(255,255,255,.13) 50%,transparent 68%);
-  background-size:220% 100%;animation:voroRefShimmer 1.35s ease-in-out infinite;transition:opacity .35s}
-.voroRefThumb.done .voroRefShine{opacity:0}
-.voroRefRing{position:absolute;inset:0;display:grid;place-items:center;transition:opacity .3s}
-.voroRefThumb.done .voroRefRing{opacity:0}
-.voroRefCheck{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transform:scale(.5);
-  transition:opacity .3s .15s,transform .45s cubic-bezier(.34,1.56,.64,1) .15s}
-.voroRefThumb.done .voroRefCheck{opacity:1;transform:none}
-.voroRefTxt{font-size:12.5px;color:rgba(236,241,248,.62);font-weight:600}
+@keyframes voroRefReveal{0%{opacity:0;transform:scale(.93)}100%{opacity:1;transform:none}}
+@keyframes voroRefImg{0%{filter:blur(12px) saturate(.55) brightness(.8);transform:scale(1.1)}100%{filter:none;transform:none}}
+/* Yuklanish qatlami — ramka (upload frame) ICHIDA, chiqib keta olmaydi */
+.voroRefLoad{position:absolute;inset:0;z-index:6;border-radius:inherit;overflow:hidden;display:grid;place-items:center;
+  background:rgba(9,10,13,.5);opacity:0;transition:opacity .22s ease;pointer-events:none}
+.voroRefLoad.in{opacity:1}
+.voroRefLoad .vbg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(14px) saturate(.5) brightness(.62);transform:scale(1.12)}
+.voroRefLoad .vshine{position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.13) 50%,transparent 65%);background-size:220% 100%;animation:voroRefShimmer 1.35s ease-in-out infinite}
+.voroRefLoad .vring{position:relative;z-index:2;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+.voroRefLoad .vlbl{position:absolute;bottom:9px;left:0;right:0;text-align:center;font-size:11px;font-weight:700;letter-spacing:.2px;color:rgba(255,255,255,.9);z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+/* Reveal — haqiqiy preview mount bo'lganda avtomatik (o'z joyida, JS-siz) */
+.panel div[style*="84px"][style*="108px"]{animation:voroRefReveal .5s cubic-bezier(.32,.72,0,1) both}
+.panel div[style*="84px"][style*="108px"]>img{animation:voroRefImg .55s cubic-bezier(.32,.72,0,1) both}
 </style>
 <script>
 (function(){
   "use strict";
   if(window.__voroRefUX)return; window.__voroRefUX=true;
   var ACCENT="#2BD4FF", R=15, C=2*Math.PI*R;
-
   function ringSvg(){
-    return '<svg width="42" height="42" viewBox="0 0 42 42">'
-      +'<circle cx="21" cy="21" r="'+R+'" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="2.6"/>'
+    return '<svg width="40" height="40" viewBox="0 0 42 42">'
+      +'<circle cx="21" cy="21" r="'+R+'" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="2.6"/>'
       +'<circle class="voroRefProg" cx="21" cy="21" r="'+R+'" fill="none" stroke="'+ACCENT+'" stroke-width="2.6" '
       +'stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'" transform="rotate(-90 21 21)"/></svg>';
   }
-  function checkSvg(){
-    return '<svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="'+ACCENT+'"/>'
-      +'<path d="M7 13.4l4 4 8-8.6" fill="none" stroke="#00131c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  }
+  function startLoad(panel, frame, url, doRevoke){
+    try{ if(frame.querySelector(".voroRefLoad"))return; }catch(e){}
+    try{ if(getComputedStyle(frame).position==="static") frame.style.position="relative"; }catch(e){}
+    var layer=document.createElement("div"); layer.className="voroRefLoad";
+    layer.innerHTML='<div class="vbg"></div><div class="vshine"></div><div class="vring">'+ringSvg()+'</div><div class="vlbl">Yuklanmoqda…</div>';
+    try{ layer.querySelector(".vbg").style.backgroundImage='url("'+url+'")'; }catch(e){}
+    frame.appendChild(layer);
+    requestAnimationFrame(function(){ layer.classList.add("in"); });
 
-  function run(panel, imgSrc, doRevoke){
-    var ov=document.createElement("div"); ov.className="voroRefOverlay";
-    ov.innerHTML='<div class="voroRefThumb"><img alt=""><div class="voroRefShine"></div>'
-      +'<div class="voroRefRing">'+ringSvg()+'</div><div class="voroRefCheck">'+checkSvg()+'</div></div>'
-      +'<div class="voroRefTxt">Yuklanmoqda…</div>';
-    var thumb=ov.querySelector(".voroRefThumb");
-    var prog=ov.querySelector(".voroRefProg");
-    var txt=ov.querySelector(".voroRefTxt");
-    ov.querySelector("img").src=imgSrc;
-    document.body.appendChild(ov);
+    var prog=layer.querySelector(".voroRefProg"), p=0, done=false, to;
+    function setRing(v){ try{ prog.setAttribute("stroke-dashoffset",(C*(1-v/100)).toFixed(1)); }catch(e){} }
+    function ptick(){ if(done)return; p+=(92-p)*0.045; setRing(p); requestAnimationFrame(ptick); }
+    ptick();
 
-    var alive=true, raf, done=false, p=0, to;
     var seen={};
     try{ [].slice.call(panel.querySelectorAll("img")).forEach(function(im){var s=im.currentSrc||im.getAttribute("src")||""; if(/^https?:/.test(s)) seen[s]=1;}); }catch(e){}
-    function real(){
-      try{ return [].slice.call(panel.querySelectorAll("img")).filter(function(im){var s=im.currentSrc||im.getAttribute("src")||""; return /^https?:/.test(s) && !seen[s];})[0]; }catch(e){ return null; }
-    }
-    function target(){
-      var rp=real(); if(rp){ var c=rp.closest("div"); if(c) return c.getBoundingClientRect(); }
-      var btns=[].slice.call(panel.querySelectorAll("button")).filter(function(b){return b.offsetWidth>120 && b.offsetHeight>40;});
-      if(btns[0]) return btns[0].getBoundingClientRect();
-      return panel.getBoundingClientRect();
-    }
-    function sync(){
-      if(!alive)return;
-      try{ var r=target(); ov.style.left=Math.round(r.left)+"px"; ov.style.top=Math.round(r.top+Math.max(0,(r.height-108)/2))+"px"; }catch(e){}
-      raf=requestAnimationFrame(sync);
-    }
-    function setRing(v){ try{ prog.setAttribute("stroke-dashoffset",(C*(1-v/100)).toFixed(1)); }catch(e){} }
-    function ptick(){ if(done)return; p+=(91-p)*0.05; setRing(p); requestAnimationFrame(ptick); }
-    function cleanup(){
-      alive=false;
-      try{cancelAnimationFrame(raf);}catch(e){}
-      try{ov.remove();}catch(e){}
-      if(doRevoke){ try{URL.revokeObjectURL(imgSrc);}catch(e){} }
-      try{obs.disconnect();}catch(e){}
-      clearTimeout(to);
-    }
-    function finish(){
-      if(done)return; done=true;
-      setRing(100); thumb.classList.add("done"); if(txt) txt.textContent="Tayyor";
-      setTimeout(function(){ ov.classList.remove("in"); setTimeout(cleanup,240); }, 520);
-    }
+    function real(){ try{ return [].slice.call(panel.querySelectorAll("img")).filter(function(im){var s=im.currentSrc||im.getAttribute("src")||""; return /^https?:/.test(s)&&!seen[s];})[0]; }catch(e){ return null; } }
+    function cleanup(){ try{layer.remove();}catch(e){} try{obs.disconnect();}catch(e){} if(doRevoke){try{URL.revokeObjectURL(url);}catch(e){}} clearTimeout(to); }
+    function finish(){ if(done)return; done=true; setRing(100); layer.classList.remove("in"); setTimeout(cleanup,240); }
     var obs=new MutationObserver(function(){ if(real()) finish(); });
     try{ obs.observe(panel,{childList:true,subtree:true,attributes:true,attributeFilter:["src"]}); }catch(e){}
-    to=setTimeout(function(){ if(!done){ ov.classList.remove("in"); setTimeout(cleanup,240); } }, 45000);
-
-    sync(); requestAnimationFrame(function(){ ov.classList.add("in"); }); ptick();
-    if(real()) finish(); // agar allaqachon tayyor bo'lsa
+    to=setTimeout(function(){ if(!done){ layer.classList.remove("in"); setTimeout(cleanup,240); } }, 45000);
+    if(real()) finish();
     return {finish:finish, cleanup:cleanup};
   }
-
-  // Fayl tanlanishini global ushlash (barcha rasm file-input'lar uchun)
+  function frameOf(panel, inp){
+    // Reference "ramkasi": panel ichidagi katta upload tugmasi (yoki preview konteyneri), bo'lmasa panel
+    try{
+      var btns=[].slice.call(panel.querySelectorAll("button")).filter(function(b){return b.offsetWidth>110&&b.offsetHeight>44&&!b.querySelector("img");});
+      if(btns[0]) return btns[0];
+    }catch(e){}
+    return panel;
+  }
   document.addEventListener("change", function(e){
     try{
       var inp=e.target;
@@ -386,22 +357,29 @@ lucide-react/dist/esm/lucide-react.js:
       if(!/image/i.test(inp.accept||""))return;
       var f=inp.files&&inp.files[0];
       if(!f||!/^image\//.test(f.type||""))return;
-      var panel=inp.closest(".panel")||inp.parentElement;
-      if(panel){ var url; try{url=URL.createObjectURL(f);}catch(e2){return;} run(panel,url,true); }
+      var panel=inp.closest(".panel")||inp.parentElement; if(!panel)return;
+      var url; try{url=URL.createObjectURL(f);}catch(e2){return;}
+      startLoad(panel, frameOf(panel,inp), url, true);
     }catch(err){}
   }, true);
 
-  // Demo/test hook (haqiqiy yuklashsiz animatsiyani ko'rish uchun)
+  // Demo (haqiqiy yuklashsiz ko'rish uchun)
   window.__voroRefDemo=function(imgUrl){
     imgUrl=imgUrl||(document.querySelector("img")&&document.querySelector("img").src);
     var panel=document.createElement("div"); panel.className="panel";
-    panel.style.cssText="position:fixed;left:48px;top:130px;width:320px;height:150px;z-index:1;opacity:.001";
-    var b=document.createElement("button"); b.style.cssText="width:300px;height:120px"; panel.appendChild(b);
-    document.body.appendChild(panel);
-    var ctrl=run(panel, imgUrl, false);
-    setTimeout(function(){ var c=document.createElement("div"); c.style.cssText="width:84px;height:108px";
-      var im=document.createElement("img"); im.src=imgUrl; im.crossOrigin="anonymous"; c.appendChild(im); panel.appendChild(c); }, 1900);
-    setTimeout(function(){ try{panel.remove();}catch(e){} }, 4200);
+    panel.style.cssText="position:fixed;left:60px;top:150px;width:300px;z-index:99991;padding:14px;background:#12141a;border-radius:16px";
+    var frame=document.createElement("button");
+    frame.style.cssText="width:100%;height:96px;border-radius:15px;background:#1b1e26;display:block";
+    panel.appendChild(frame); document.body.appendChild(panel);
+    startLoad(panel, frame, imgUrl, false);
+    setTimeout(function(){
+      try{frame.remove();}catch(e){}
+      var c=document.createElement("div");
+      c.setAttribute("style","position:relative;width:84px;height:108px;border-radius:13px;overflow:hidden;background:#000;flex:none");
+      var im=document.createElement("img"); im.src=imgUrl; im.setAttribute("style","width:100%;height:100%;object-fit:cover");
+      c.appendChild(im); panel.appendChild(c);
+    }, 2000);
+    setTimeout(function(){ try{panel.remove();}catch(e){} }, 5200);
     return "demo boshlandi";
   };
 })();
