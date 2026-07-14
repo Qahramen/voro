@@ -457,6 +457,17 @@
   .gs-fill{height:100%;width:6%;border-radius:99px;transition:width .5s;
     background:linear-gradient(90deg,var(--cyan),var(--mint));
     box-shadow:0 0 10px rgba(43,212,255,.6);}
+
+  /* Agar jadval kelib qolsa — toza ko'rinish (xom quvurlar emas) */
+  .md-table{margin:8px 0;overflow-x:auto;border-radius:12px;
+    border:1px solid var(--glass-border);}
+  .md-table table{border-collapse:collapse;width:100%;font-size:13px;white-space:normal;}
+  .md-table th,.md-table td{padding:7px 11px;text-align:left;
+    border-bottom:1px solid var(--glass-border);}
+  .md-table tr:last-child th,.md-table tr:last-child td{border-bottom:none;}
+  .md-table th{background:rgba(255,255,255,.05);font-weight:700;color:var(--text);}
+  .md-table td{color:var(--dim);}
+  .md-li{display:block;padding-left:2px;}
 </style>
 </head>
 <body>
@@ -754,7 +765,24 @@ function el(h){const d=document.createElement("div");d.innerHTML=h.trim();return
 function scrollDown(){chat.scrollTop=chat.scrollHeight;}
 function hideEmpty(){document.getElementById("empty")?.remove();}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
-function md(s){return esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");}
+function md(s){
+  s=esc(String(s));
+  // markdown jadval -> toza HTML jadval (xom quvurlar chiqmasin)
+  s=s.replace(/((?:^[ \t]*\|[^\n]*\|[ \t]*(?:\n|$))+)/gm,function(block){
+    const rows=block.split("\n").map(r=>r.trim()).filter(Boolean);
+    const isSep=r=>/^\|[\s:|-]+\|?$/.test(r);
+    if(rows.length<2||!rows.some(isSep)) return block;
+    const data=rows.filter(r=>!isSep(r)).map(r=>r.replace(/^\|/,"").replace(/\|$/,"").split("|").map(c=>c.trim()));
+    let t='<div class="md-table"><table>';
+    data.forEach((row,ri)=>{const tag=ri===0?"th":"td";t+="<tr>"+row.map(c=>`<${tag}>${c}</${tag}>`).join("")+"</tr>";});
+    return t+"</table></div>";
+  });
+  s=s.replace(/^[ \t]*#{1,4}[ \t]+(.*)$/gm,'<b>$1</b>');   // sarlavha -> qalin
+  s=s.replace(/^[ \t]*---+[ \t]*$/gm,'');                  // gorizontal chiziqni olib tashla
+  s=s.replace(/^[ \t]*[-•*][ \t]+(.*)$/gm,'<span class="md-li">• $1</span>'); // punkt
+  s=s.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');               // qalin
+  return s;
+}
 function setState(s,text){
   if(ava) ava.className="sect"+(s?" "+s:"");
   if(sectName){

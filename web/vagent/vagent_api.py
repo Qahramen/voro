@@ -34,7 +34,7 @@ from datetime import date
 from typing import Any, AsyncGenerator, Optional
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
@@ -336,7 +336,7 @@ def _atlas_model_id(friendly: str, kind: str, n_refs: int) -> str:
 
 
 def _attachment_b64(url):
-    """voro.uz/vagent/file/ lokal URL'idan base64 + media_type (Claude vision uchun)."""
+    """voro.uz/vagent/file/ lokal URL'idan XOM base64 + media_type (Atlas generatsiya uchun)."""
     try:
         name = url.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
         path = os.path.join(UPLOADS_DIR, name)
@@ -350,6 +350,33 @@ def _attachment_b64(url):
         return base64.b64encode(raw).decode(), mt
     except Exception:
         return None, None
+
+
+def _vision_b64(url):
+    """Claude VISION uchun: rasmni JPEG'ga qayta kodlab kichraytiramiz.
+    Katta telefon rasmlari / HEIC / RGBA -> Claude 'Could not process image' bermaydi."""
+    try:
+        name = url.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
+        path = os.path.join(UPLOADS_DIR, name)
+        if not os.path.exists(path):
+            return None, None
+        from PIL import Image, ImageOps
+        import io
+        img = Image.open(path)
+        try:
+            img = ImageOps.exif_transpose(img)   # telefon aylanmasini to'g'rilaymiz
+        except Exception:
+            pass
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        MAX = 1568                               # Claude tavsiya qilgan maksimal o'lcham
+        if max(img.size) > MAX:
+            img.thumbnail((MAX, MAX))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        return base64.b64encode(buf.getvalue()).decode(), "image/jpeg"
+    except Exception:
+        return _attachment_b64(url)              # PIL xato bersa — xom holga qaytamiz
 
 
 async def _atlas_upload_ref(url):
@@ -595,6 +622,14 @@ def build_system_prompt(user_id: str, lang: str = "uz") -> str:
 - {lang_rule}, iliq, samimiy, qisqa. Mos joyda 1-2 emoji.
 - Foydalanuvchini ismi bilan chaqir (bilmasang bir marta so'ra va remember_fact bilan saqla).
 - PROAKTIVSAN: g'oyani kuchaytir, o'z takliflaringni qo'sh. Suhbat boshida get_today_context'ni tekshir — bayram yaqin bo'lsa, mos g'oya taklif qil.
+
+# JAVOB KO'RINISHI (Apple darajasida toza, professional — buzilmas)
+Javoblaring TOZA va TARTIBLI bo'lsin — chat mobil ilovada ko'rinadi, tartibsiz belgilar XUNUK:
+- MARKDOWN JADVAL ISHLATMA (`| ... |`, `|---|`) — chatda xom quvurlar bo'lib chiqadi, xunuk. Narx/variant solishtirishni present_options TUGMALARI bilan ber.
+- Kod bloklari (```), sarlavha belgilar (#), gorizontal chiziq (`---`), ortiqcha yulduzcha/tire ISHLATMA.
+- Faqat: qisqa xatboshilar, kerak bo'lsa **qalin** (muhim so'z), yoki oddiy "• " punktlar. 3-4 qatordan oshirma.
+- Narxni matnda uzun hisob-kitob qilib yozma — qisqa ayt ("720p — 90 tangacha"), tafsilotni tugmalarga qoldir.
+- Har javob sokin, ishonchli, minimalist bo'lsin — hech qanday tartibsiz simbol yig'indisi bo'lmasin.
 
 # EMOTSIONAL INTELLEKT (psixolog darajasida)
 Har xabardan suhbatdoshning holatini his qil va shunga moslash:
@@ -1104,7 +1139,7 @@ async def vagent_chat(body: ChatIn):
         _content = []
         for url in _atts:
             user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
-            _b64, _mt = _attachment_b64(url)
+            _b64, _mt = _vision_b64(url)
             if _b64:
                 _content.append({"type": "image",
                                  "source": {"type": "base64", "media_type": _mt, "data": _b64}})
@@ -1193,10 +1228,10 @@ _MEDIA_HOSTS = (
 
 
 @vagent_router.get("/img")
-async def vagent_img(u: str):
+async def vagent_img(u: str, request: Request):
     """Natija rasm/video'sini voro.uz orqali (Referer'siz) uzatamiz.
     Sabab: atlas-media OSS'da hotlink himoyasi bor — voro.uz Referer bilan 403.
-    Same-origin proxy tufayli rasm Telegram/har qanday brauzerda HAR DOIM ko'rinadi."""
+    VIDEO uchun Range so'rovlarini uzatamiz (Safari <video> aks holda ijro etmaydi)."""
     from urllib.parse import urlparse
     try:
         p = urlparse(u)
@@ -1206,14 +1241,26 @@ async def vagent_img(u: str):
         return {"ok": False, "error": "host not allowed"}
     try:
         client = httpx.AsyncClient(timeout=90, follow_redirects=True)
-        req = client.build_request("GET", u)   # MUHIM: Referer yubormaymiz
+        fwd = {}
+        rng = request.headers.get("range")
+        if rng:
+            fwd["Range"] = rng                 # video seek/stream uchun
+        req = client.build_request("GET", u, headers=fwd)   # MUHIM: Referer yubormaymiz
         r = await client.send(req, stream=True)
-        if r.status_code != 200:
+        if r.status_code not in (200, 206):
             code = r.status_code
             await r.aclose()
             await client.aclose()
             return {"ok": False, "error": f"upstream {code}"}
         ctype = r.headers.get("content-type", "application/octet-stream")
+        out = {
+            "Cache-Control": "public, max-age=604800",
+            "Access-Control-Allow-Origin": "*",
+            "Accept-Ranges": "bytes",
+        }
+        for h in ("content-range", "content-length"):
+            if h in r.headers:
+                out[h.title()] = r.headers[h]
 
         async def body():
             try:
@@ -1223,10 +1270,8 @@ async def vagent_img(u: str):
                 await r.aclose()
                 await client.aclose()
 
-        return StreamingResponse(body(), media_type=ctype, headers={
-            "Cache-Control": "public, max-age=604800",
-            "Access-Control-Allow-Origin": "*",
-        })
+        return StreamingResponse(body(), status_code=r.status_code,
+                                 media_type=ctype, headers=out)
     except Exception as e:
         return {"ok": False, "error": str(e)[:150]}
 
