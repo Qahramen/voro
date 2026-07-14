@@ -121,6 +121,9 @@
         padding:10px max(14px,calc((100% - 760px)/2)) calc(var(--padb) + 104px);
         display:flex;flex-direction:column;gap:10px;
         -webkit-overflow-scrolling:touch;}
+  /* MUHIM: chat bolalari HECH QACHON siqilmasin (uzun suhbatda karta/rasm
+     2px ga siqilib qolardi — tasdiq tugmalari va natija rasmi yashirinardi) */
+  #chat > *{flex:0 0 auto;}
   .msg{max-width:85%;padding:11px 15px;border-radius:20px;
        word-wrap:break-word;white-space:pre-wrap;
        animation:appear .45s var(--spring);}
