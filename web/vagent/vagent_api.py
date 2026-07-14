@@ -1015,21 +1015,18 @@ async def run_confirmed_generation(sess: "Session", emit):
         return
     results = out.get("results") or []
     ok = sum(1 for r in results if r.get("status") == "ok")
-    # Suhbat izchilligi: keyingi savollar uchun kontekst yozuvi
-    note = json.dumps({"generated": results}, ensure_ascii=False)[:1500]
-    sess.messages.append({"role": "assistant", "content": [
-        {"type": "text", "text": f"[generatsiya bajarildi: {ok}/{len(results)} ok] {note}"}]})
     # Har MUVAFFAQIYATSIZ ish uchun sababni OCHIQ ko'rsat (avval yashirilardi)
     for r in results:
         if r.get("status") != "ok":
             await emit("error", {"text": f"⚠️ {r.get('label', 'Ish')}: "
                                          f"{r.get('error') or 'nomaʼlum xato'}"})
-    if ok:
-        await emit("text", {"delta": _GEN_DONE[lang].format(ok=ok, n=len(results))})
-        await emit("options", {"prompt": "", "options": _GEN_OPTS[lang]})
-    else:
-        await emit("text", {"delta": _GEN_ALLFAIL[lang]})
-        await emit("options", {"prompt": "", "options": _GEN_RETRY_OPTS[lang]})
+    done_txt = _GEN_DONE[lang].format(ok=ok, n=len(results)) if ok else _GEN_ALLFAIL[lang]
+    # Suhbat izchilligi: assistant turn sifatida TOZA matn qo'shamiz.
+    # MUHIM: xom JSON/URL QO'SHMAYMIZ — aks holda model keyingi javobda uni
+    # takrorlab, foydalanuvchiga chiqarib yuborishi mumkin (bug bo'lgan).
+    sess.messages.append({"role": "assistant", "content": [{"type": "text", "text": done_txt}]})
+    await emit("text", {"delta": done_txt})
+    await emit("options", {"prompt": "", "options": _GEN_OPTS[lang] if ok else _GEN_RETRY_OPTS[lang]})
 
 
 # ============================================================
@@ -1077,9 +1074,16 @@ async def vagent_chat(body: ChatIn):
     sess = await get_session(body.uid)
     sess.lang = (body.lang or "uz") if body.lang in ("uz","ru","en") else "uz"
 
-    if body.confirm_token and sess.pending_quote and \
-            body.confirm_token == sess.pending_quote["token"]:
-        sess.confirmed_token = body.confirm_token
+    # Foydalanuvchi tugma o'rniga "ha"/"да"/"yes" deb YOZSA ham tasdiq deb qabul qilamiz
+    _affirm = {"ha", "xa", " haa", "haa", "yes", "yeah", "yep", "ok", "okay", "okey",
+               "boshla", "roziman", "davom", "давай", "да", "ага", "хорошо", "го", "go"}
+    _msg_norm = (body.message or "").strip().lower().strip("!.,?)( ")
+    _typed_yes = (not body.confirm_token and not body.decline and sess.pending_quote
+                  and _msg_norm in _affirm)
+
+    if (body.confirm_token and sess.pending_quote and
+            body.confirm_token == sess.pending_quote["token"]) or _typed_yes:
+        sess.confirmed_token = sess.pending_quote["token"]
         sess.run_confirmed = True   # worker LLM'ni emas, generatsiyani ishga tushiradi
         track(body.uid, "confirmed", {"total": sess.pending_quote["total"]})
         user_text = "✅ Ha, roziman, boshla!"
