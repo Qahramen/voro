@@ -362,7 +362,24 @@ const API_BASE = "https://voro.uz/vagent";   // INTEGRATSIYA: voro.uz API manzil
 
 // ===== AUTH (HMAC URL parametrlari) =====
 const qp = new URLSearchParams(location.search);
-const AUTH = { uid: qp.get("uid")||"", exp: qp.get("exp")||"", sig: qp.get("sig")||"" };
+const AUTH = { uid: qp.get("uid")||"", exp: qp.get("exp")||"", sig: qp.get("sig")||"", lang: (["uz","ru","en"].includes(qp.get("lang"))?qp.get("lang"):"uz") };
+const I18N = {
+  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami" },
+  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого" },
+  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total" },
+};
+let VT = I18N[AUTH.lang] || I18N.uz;
+function applyLang(){ try{
+  var q=function(x){return document.querySelector(x);};
+  if(q("#empty h2")) q("#empty h2").textContent=VT.greeting;
+  if(q("#empty p")) q("#empty p").textContent=VT.sub;
+  document.querySelectorAll("#empty .chips button").forEach(function(b,i){ if(VT.chips[i]) b.textContent=VT.chips[i]; });
+  if(q("#inp")) q("#inp").placeholder=VT.ph;
+  if(q("#attach")) q("#attach").title=VT.attach;
+  if(q("#mic")) q("#mic").title=VT.mic;
+  document.documentElement.lang=AUTH.lang||"uz";
+}catch(e){} }
+applyLang();
 const authQS = `uid=${AUTH.uid}&exp=${AUTH.exp}&sig=${AUTH.sig}`;
 
 const ROBOT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 400 500" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
@@ -722,13 +739,13 @@ function renderConfirm(d){
     `<div class="cc-job"><span>${esc(j.label||"")}</span><span>${j.price??"?"} ${ic('star',13)}</span></div>`).join("");
   const card=el(`
     <div class="confirm-card">
-      <div class="cc-title">${ic('card',18)} Tasdiqlash kerak</div>
+      <div class="cc-title">${ic('card',18)} ${VT.cc_title}</div>
       <div>${esc(d.summary||"")}</div>
       <div>${jobs}</div>
-      <div class="cc-total"><span>Jami</span><span><span class="star">${ic('star',15)}</span> ${d.total}</span></div>
+      <div class="cc-total"><span>${VT.total}</span><span><span class="star">${ic('star',15)}</span> ${d.total}</span></div>
       <div class="cc-btns">
-        <button class="btn-no">Yo'q</button>
-        <button class="btn-yes">Ha, boshla</button>
+        <button class="btn-no">${VT.no}</button>
+        <button class="btn-yes">${VT.yes}</button>
       </div>
       <div class="cc-answered"></div>
     </div>`);

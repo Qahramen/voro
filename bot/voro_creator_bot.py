@@ -101,7 +101,13 @@ VORO_BOT_SECRET = os.environ.get("VORO_BOT_SECRET", "")
 def make_vagent_url(uid: int) -> str:
     exp = int(time.time()) + 3600
     sig = hmac.new(VORO_BOT_SECRET.encode(), f"{uid}:{exp}".encode(), hashlib.sha256).hexdigest()
-    return f"https://voro.uz/vagent.html?uid={uid}&exp={exp}&sig={sig}"
+    try:
+        _lang = get_user_lang(uid)
+    except Exception:
+        _lang = "uz"
+    if _lang not in ("uz", "ru", "en"):
+        _lang = "uz"
+    return f"https://voro.uz/vagent.html?uid={uid}&exp={exp}&sig={sig}&lang={_lang}"
 # Admin kontakt — ulgurji kredit xaridlari uchun (pricing.json'dan hot-reload)
 ADMIN_CONTACT      = "vorouz"   # t.me/ADMIN_CONTACT
 

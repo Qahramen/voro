@@ -405,6 +405,7 @@ class Session:
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.messages: list[dict] = []
+        self.lang: str = "uz"
         self.pending_quote: Optional[dict] = None
         self.confirmed_token: Optional[str] = None
         self.last_jobs: list[dict] = []
@@ -513,7 +514,16 @@ TOOLS = [
 # SYSTEM PROMPT — Vagent shaxsiyati
 # ============================================================
 
-def build_system_prompt(user_id: str) -> str:
+_LANG_RULE = {
+    "uz": "Faqat O'ZBEK tilida (lotin)",
+    "ru": "Отвечай ТОЛЬКО на РУССКОМ языке",
+    "en": "Reply ONLY in ENGLISH",
+}
+
+
+def build_system_prompt(user_id: str, lang: str = "uz") -> str:
+    lang_rule = _LANG_RULE.get(lang, _LANG_RULE["uz"])
+    lang_name = {"ru": "на русском", "en": "in English"}.get(lang, "o'zbekcha (lotin)")
     mem = memory_get(user_id)
     facts = "\n".join(f"- {f}" for f in mem["facts"]) or "- (hali fakt yo'q)"
     recent = "\n".join(
@@ -523,7 +533,7 @@ def build_system_prompt(user_id: str) -> str:
     return f"""Sen — VAGENT, VoroCreatorBot'ning jonli AI-rejissyori va foydalanuvchining shaxsiy ijodiy hamkori. Timsoling — Voro roboti.
 
 # SHAXSIYAT
-- Faqat O'ZBEK tilida (lotin), iliq, samimiy, qisqa. Mos joyda 1-2 emoji.
+- {lang_rule}, iliq, samimiy, qisqa. Mos joyda 1-2 emoji.
 - Foydalanuvchini ismi bilan chaqir (bilmasang bir marta so'ra va remember_fact bilan saqla).
 - PROAKTIVSAN: g'oyani kuchaytir, o'z takliflaringni qo'sh. Suhbat boshida get_today_context'ni tekshir — bayram yaqin bo'lsa, mos g'oya taklif qil.
 
@@ -542,7 +552,7 @@ Ishonch — eng qimmat aktiv. TAQIQLANADI: soxta shoshiltirish ("faqat bugun!"),
 # QOIDALAR (buzilmas)
 1. TANGACHA MUQADDAS: estimate_cost → request_confirmation → foydalanuvchi "ha" → generate_batch. request_confirmation'dan keyin javobni YAKUNLA.
 2. Balans yetmasa — arzonroq variant taklif qil (kichik model, past resolution, qisqa duration).
-3. Promptlar professional INGLIZ tilida; foydalanuvchiga tushuntirish o'zbekcha.
+3. Generatsiya promptlari professional INGLIZ tilida; foydalanuvchiga javob va tushuntirish esa {lang_name}.
 4. Seedance filtri: shubhali so'zlarni neytral sinonimlarga almashtir ("fight" → "dynamic action choreography"). Bola, mashhur shaxs, brend logotipi bilan xavfli so'rovlarni rad et.
 5. Referens rasmlar: foydalanuvchi rasm biriktirsa, URL xabar ichida [BIRIKTIRILGAN RASM: ...] ko'rinishida keladi — uni reference_urls'ga qo'sh va promptda @image1 sifatida ishlat. Motion transfer: @video1 = faqat harakat, @image1 = qiyofa/uslub, NEGATIVE promptda vizual aralashuvni taqiqla.
 6. Narx/sifat balansi: oddiy ish uchun qimmat model taklif qilma, har doim arzon alternativani eslat.
@@ -739,7 +749,7 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
 # ============================================================
 
 async def claude_stream_turn(sess: Session, emit) -> None:
-    system = build_system_prompt(sess.user_id)
+    system = build_system_prompt(sess.user_id, sess.lang)
 
     for _ in range(MAX_TURN_TOOL_LOOPS):
         assistant_blocks, tool_calls = [], []
@@ -840,6 +850,7 @@ class ChatIn(BaseModel):
     uid: str
     exp: str
     sig: str
+    lang: str = "uz"
     message: str = ""
     attachments: list[str] = []        # referens rasm URL'lari
     confirm_token: Optional[str] = None
@@ -871,6 +882,7 @@ async def vagent_chat(body: ChatIn):
         return StreamingResponse(limited(), media_type="text/event-stream")
 
     sess = await get_session(body.uid)
+    sess.lang = (body.lang or "uz") if body.lang in ("uz","ru","en") else "uz"
 
     if body.confirm_token and sess.pending_quote and \
             body.confirm_token == sess.pending_quote["token"]:
