@@ -290,8 +290,46 @@ def _atlas_model_id(friendly: str, kind: str, n_refs: int) -> str:
     return "bytedance/seedance-2.0/text-to-video"
 
 
+def _attachment_b64(url):
+    """voro.uz/vagent/file/ lokal URL'idan base64 + media_type (Claude vision uchun)."""
+    try:
+        name = url.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
+        path = os.path.join(UPLOADS_DIR, name)
+        if not os.path.exists(path):
+            return None, None
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        ext = name.rsplit(".", 1)[-1].lower()
+        mt = {"png": "image/png", "webp": "image/webp",
+              "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(ext, "image/jpeg")
+        return base64.b64encode(raw).decode(), mt
+    except Exception:
+        return None, None
+
+
+async def _atlas_upload_ref(url):
+    """Lokal reference URL'ni Atlas uploadMedia orqali aliyuncs URL'ga aylantiradi
+    (Atlas tashqi URL'ni ishonchli olmasligi mumkin). Tashqi URL bo'lsa o'zini qaytaradi."""
+    b64, mt = _attachment_b64(url)
+    if not b64:
+        return url
+    try:
+        raw = base64.b64decode(b64)
+        ext = {"image/png": "png", "image/webp": "webp"}.get(mt, "jpg")
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(
+                f"{ATLAS_BASE}/api/v1/model/uploadMedia",
+                headers={"Authorization": f"Bearer {ATLAS_API_KEY}", "User-Agent": "Mozilla/5.0"},
+                files={"file": (f"ref.{ext}", raw, mt)})
+            d = (r.json().get("data") or {})
+            return d.get("download_url") or url
+    except Exception:
+        return url
+
+
 async def atlas_create_job(kind: str, model: str, payload: dict) -> str:
     refs = payload.get("references") or []
+    refs = [await _atlas_upload_ref(u) for u in refs]   # lokal -> Atlas aliyuncs
     model_id = _atlas_model_id(model, kind, len(refs))
     endpoint = "generateImage" if kind == "image" else "generateVideo"
     body = {"model": model_id, "prompt": payload.get("prompt", "")}
@@ -848,10 +886,19 @@ async def vagent_chat(body: ChatIn):
         user_text = body.message.strip() or "Salom!"
         track(body.uid, "msg")
 
-    for url in body.attachments[:4]:
-        user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
-
-    sess.messages.append({"role": "user", "content": user_text})
+    _atts = [u for u in body.attachments[:4] if u]
+    if _atts:
+        _content = []
+        for url in _atts:
+            user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
+            _b64, _mt = _attachment_b64(url)
+            if _b64:
+                _content.append({"type": "image",
+                                 "source": {"type": "base64", "media_type": _mt, "data": _b64}})
+        _content.append({"type": "text", "text": user_text})
+        sess.messages.append({"role": "user", "content": _content})
+    else:
+        sess.messages.append({"role": "user", "content": user_text})
     if len(sess.messages) > 30:
         sess.messages = sess.messages[-30:]
         while sess.messages and (
