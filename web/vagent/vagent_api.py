@@ -715,13 +715,24 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
 
     if name == "request_confirmation":
         token = uuid.uuid4().hex[:12]
+        it = bool(inp.get("is_iteration", False))
+        # Kartada har-ish narxini KO'RSATISH uchun oldindan hisoblaymiz
+        # (aks holda frontend'da "?" chiqib qolardi).
+        jobs_priced = []
+        for j in inp["jobs"]:
+            p = calc_price(j.get("kind", "image"), j.get("model", ""),
+                           j.get("resolution", "720p"), int(j.get("duration", 5) or 5))
+            if p is not None and it:
+                p = max(1, int(p * FREE_ITERATION_DISCOUNT))
+            jj = dict(j)
+            jj["price"] = p
+            jobs_priced.append(jj)
         sess.pending_quote = {"token": token, "total": int(inp["total"]),
-                              "jobs": inp["jobs"],
-                              "is_iteration": bool(inp.get("is_iteration", False))}
+                              "jobs": inp["jobs"], "is_iteration": it}
         sess.confirmed_token = None
         track(uid, "quote_shown", {"total": int(inp["total"])})
         await emit("confirm", {"token": token, "summary": inp["summary"],
-                               "total": int(inp["total"]), "jobs": inp["jobs"],
+                               "total": int(inp["total"]), "jobs": jobs_priced,
                                "balance": get_balance(uid)})
         return {"status": "waiting_user", "token": token}
 
@@ -820,6 +831,29 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
 # CLAUDE STREAMING ORKESTRATSIYASI
 # ============================================================
 
+# Status chip'da backend tool nomlari (estimate_cost, request_confirmation...)
+# ko'rinmasligi uchun — do'stona, ko'p tilli matn. UI chiqaradigan tool'lar jim.
+_TOOL_STATUS = {
+    "check_balance":     {"uz": "Balansni tekshiryapman", "ru": "Проверяю баланс", "en": "Checking balance"},
+    "estimate_cost":     {"uz": "Narxni hisoblayapman", "ru": "Считаю стоимость", "en": "Calculating price"},
+    "get_pricing":       {"uz": "Narxlarni ko'ryapman", "ru": "Смотрю цены", "en": "Checking prices"},
+    "get_today_context": {"uz": "Tayyorlayapman", "ru": "Готовлю", "en": "Preparing"},
+    "search_skills":     {"uz": "Eng yaxshi retseptni qidiryapman", "ru": "Ищу лучший рецепт", "en": "Finding the best recipe"},
+    "remember_fact":     {"uz": "Eslab qolyapman", "ru": "Запоминаю", "en": "Remembering"},
+    "list_elements":     {"uz": "Elementlarni ko'ryapman", "ru": "Смотрю элементы", "en": "Checking elements"},
+}
+_TOOL_STATUS_SILENT = {"request_confirmation", "present_options", "generate_batch"}
+
+
+def _tool_status_text(name: str, lang: str):
+    if name in _TOOL_STATUS_SILENT:
+        return None
+    m = _TOOL_STATUS.get(name)
+    if not m:
+        return None
+    return m.get(lang if lang in ("uz", "ru", "en") else "uz", m["uz"])
+
+
 async def claude_stream_turn(sess: Session, emit) -> None:
     system = build_system_prompt(sess.user_id, sess.lang)
 
@@ -890,7 +924,9 @@ async def claude_stream_turn(sess: Session, emit) -> None:
 
         results, waiting_user = [], False
         for tc in tool_calls:
-            await emit("status", {"text": f"🔧 {tc['name']}"})
+            _st = _tool_status_text(tc["name"], sess.lang)
+            if _st:
+                await emit("status", {"text": _st})
             out = await run_tool(tc["name"], tc["input"], sess, emit)
             blocks: list[dict] = [{"type": "text",
                                    "text": json.dumps(out, ensure_ascii=False)}]

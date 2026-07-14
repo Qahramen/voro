@@ -436,17 +436,6 @@ lucide-react/dist/esm/lucide-react.js:
         b.onclick=openVagent;
         nav.appendChild(b);
       }
-      // 2) DOCK (yaratish bo'limi bari)
-      var dock=document.querySelector("nav.dock");
-      if(dock && !document.getElementById("voro-vdock")){
-        var dt=dock.querySelector("button.dock-item")||dock.querySelector("button");
-        var d=document.createElement("button");
-        d.id="voro-vdock"; d.className=dt?dt.className:"tap dock-item";
-        if(dt) d.setAttribute("style", dt.getAttribute("style")||"");
-        d.innerHTML=ICON20+'<span>Vagent</span>';
-        d.onclick=openVagent;
-        dock.appendChild(d);
-      }
     }catch(e){}
   }
   var obs=new MutationObserver(add);

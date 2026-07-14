@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- MUHIM: atlas-media (Aliyun OSS) hotlink himoyasi voro.uz Referer'ini 403 qiladi.
+     no-referrer bilan rasm/video URL'lari Referer'siz so'raladi -> 200 -> ko'rinadi. -->
+<meta name="referrer" content="no-referrer">
 <title>Vagent — Voro AI rejissyor</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -37,17 +40,17 @@
   }
 
   /* ---------- ORQA FON: suzuvchi rang dog'lari (shisha shulardan tiriladi) ---------- */
-  .blobs{position:fixed;inset:0;z-index:0;filter:blur(70px);}
-  .blob{position:absolute;border-radius:50%;opacity:.5;will-change:transform;}
-  .b1{width:44vh;height:44vh;left:-12vh;top:-8vh;
+  .blobs{position:fixed;inset:0;z-index:0;filter:blur(80px);}
+  .blob{position:absolute;border-radius:50%;opacity:.12;will-change:transform;}
+  .b1{width:44vh;height:44vh;left:-14vh;top:-12vh;
+      background:radial-gradient(circle,#2BD4FF,transparent 65%);
+      animation:drift1 34s ease-in-out infinite alternate;}
+  .b2{width:36vh;height:36vh;right:-12vh;top:30vh;
       background:radial-gradient(circle,#3D7BFF,transparent 65%);
-      animation:drift1 26s ease-in-out infinite alternate;}
-  .b2{width:38vh;height:38vh;right:-10vh;top:26vh;
-      background:radial-gradient(circle,#8A5CFF,transparent 65%);
-      animation:drift2 32s ease-in-out infinite alternate;}
-  .b3{width:34vh;height:34vh;left:14vw;bottom:-10vh;
+      animation:drift2 40s ease-in-out infinite alternate;}
+  .b3{width:32vh;height:32vh;left:14vw;bottom:-12vh;
       background:radial-gradient(circle,#19C8A5,transparent 65%);
-      animation:drift3 29s ease-in-out infinite alternate;}
+      animation:drift3 37s ease-in-out infinite alternate;}
   @keyframes drift1{to{transform:translate(9vw,11vh) scale(1.15)}}
   @keyframes drift2{to{transform:translate(-11vw,14vh) scale(.9)}}
   @keyframes drift3{to{transform:translate(12vw,-9vh) scale(1.2)}}
@@ -66,40 +69,39 @@
       0 12px 34px rgba(2,6,16,.45);            /* havoda suzish soyasi */
   }
 
-  /* ---------- SUZUVCHI SARLAVHA ---------- */
-  header{
-    position:sticky;top:0;z-index:20;
-    margin:calc(10px + env(safe-area-inset-top)) 12px 6px;
-    padding:10px 14px;border-radius:var(--r);
-    display:flex;align-items:center;gap:12px;
-  }
-  .ava{position:relative;width:48px;height:48px;flex:none;
-       border-radius:50%;padding:3px;
-       background:linear-gradient(155deg,rgba(255,255,255,.35),rgba(255,255,255,.06));
-       box-shadow:inset 0 1px 1px rgba(255,255,255,.4), 0 4px 14px rgba(2,6,16,.5);}
-  .ava .robot{width:100%;height:100%;border-radius:50%;overflow:hidden;
-           background:radial-gradient(circle at 35% 30%, #16243C, #0A1220 75%);
-           display:flex;align-items:center;justify-content:center;
-           animation:float 3.6s ease-in-out infinite;}
-  .ava .robot svg{width:88%;height:88%;}
-  .ava::after{content:"";position:absolute;inset:-3px;border-radius:50%;
-              border:2px solid transparent;transition:.35s;}
-  .ava.thinking::after{border-color:var(--cyan) transparent var(--cyan) transparent;
-                       animation:spin 1s linear infinite;}
-  .ava.working::after{border-color:rgba(74,227,181,.75);
-                      animation:pulse 1.1s ease-in-out infinite;}
   @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.55}}
 
-  .hinfo{flex:1;min-width:0;}
-  .hinfo h1{font-size:17px;font-weight:700;letter-spacing:-.01em;}
-  .hstatus{font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-           display:flex;align-items:center;gap:6px;}
-  .hstatus.online{color:var(--mint);font-weight:600;}
-  .hstatus.online::before{content:"";width:7px;height:7px;border-radius:50%;flex:none;
-           background:var(--mint);box-shadow:0 0 8px rgba(74,227,181,.9);
-           animation:pulse 2.4s ease-in-out infinite;}
+  /* ---------- TEPA PANEL (voro.uz sayt uslubi) ---------- */
+  header.topbar{
+    position:sticky;top:0;z-index:20;
+    padding:calc(9px + env(safe-area-inset-top)) 15px 9px;
+    display:flex;align-items:center;gap:11px;
+    background:rgba(7,8,9,.72);
+    -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  /* voro.uz brand = bosh sahifaga qaytish (alohida tugma yo'q) */
+  .brand{display:flex;align-items:center;gap:9px;flex:none;cursor:pointer;
+    padding:4px 8px 4px 4px;border-radius:12px;background:transparent;
+    font-weight:800;font-size:16px;letter-spacing:-.3px;color:#F5F7FA;
+    transition:transform .14s var(--spring),background .2s;}
+  .brand:hover{background:rgba(255,255,255,.05);}
+  .brand:active{transform:scale(.95);}
+  .brand-badge{width:30px;height:30px;border-radius:50%;flex:0 0 auto;
+    display:grid;place-items:center;
+    background:linear-gradient(160deg,#26262C,#060608);
+    box-shadow:0 4px 14px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.2),inset 0 -8px 14px rgba(43,212,255,.35);}
+  .brand-txt{white-space:nowrap;}
+  .sect{flex:1;min-width:0;display:flex;align-items:center;gap:7px;
+    color:var(--dim);font-size:13.5px;font-weight:600;}
+  .sect b{color:var(--text);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sect .dot{width:7px;height:7px;border-radius:50%;flex:none;
+    background:var(--mint);box-shadow:0 0 8px rgba(74,227,181,.9);
+    animation:pulse 2.4s ease-in-out infinite;}
+  .sect.thinking .dot,.sect.working .dot{background:var(--cyan);box-shadow:0 0 8px rgba(43,212,255,.9);}
+  @media(max-width:359px){.brand-txt{display:none;}}
   .balance{display:flex;align-items:center;gap:6px;padding:8px 14px;
            border-radius:var(--r-pill);font-weight:700;font-size:14px;
            background:var(--glass-strong);
@@ -191,8 +193,15 @@
     color:var(--dim);box-shadow:inset 0 1px 0 rgba(255,255,255,.2);}
   .cc-btns button:active{transform:scale(.95);}
   .confirm-card.answered .cc-btns{display:none;}
-  .cc-answered{font-size:13px;color:var(--dim);display:none;}
-  .confirm-card.answered .cc-answered{display:block;}
+  .cc-answered{font-size:13px;color:var(--mint);font-weight:600;display:none;align-items:center;gap:6px;}
+  .cc-answered .ic{color:var(--mint);}
+  .confirm-card.answered .cc-answered{display:flex;}
+  .cc-sum{font-size:14px;color:var(--text);line-height:1.45;}
+  .cc-jobs{display:flex;flex-direction:column;gap:6px;}
+  .cc-jp{color:var(--text);font-weight:600;flex:none;display:inline-flex;align-items:center;gap:3px;}
+  .cc-jp .ic{color:var(--icon);}
+  .cc-bal{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim);margin-top:-3px;}
+  .cc-bal .star{color:var(--icon);display:inline-flex;vertical-align:-2px;}
 
   /* ---------- NATIJA KARTASI ---------- */
   .result-card{align-self:stretch;border-radius:var(--r);overflow:hidden;
@@ -331,16 +340,14 @@
 
 <div class="blobs"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
 
-<header class="glass">
-  <button class="hd-home" id="hdHome" title="voro.uz">
-    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
-    <span>voro.uz</span>
+<header class="topbar">
+  <button class="brand" id="hdHome" title="voro.uz — bosh sahifa">
+    <span class="brand-badge">
+      <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><defs><linearGradient id="vgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EAF7FF"/><stop offset="1" stop-color="#2BD4FF"/></linearGradient></defs><path d="M4.6 5.2 L12 18.8 L19.4 5.2" fill="none" stroke="url(#vgrad)" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+    <span class="brand-txt">voro.uz</span>
   </button>
-  <div class="ava" id="ava"><div class="robot" data-robot></div></div>
-  <div class="hinfo">
-    <h1>Vagent</h1>
-    <div class="hstatus online" id="hstatus">online</div>
-  </div>
+  <div class="sect" id="ava"><b>Vagent</b><i class="dot"></i></div>
   <div class="balance"><span class="star"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4.1-4 5.7-.8z"/></svg></span><span id="bal">…</span></div>
 </header>
 
@@ -401,9 +408,9 @@ const API_BASE = "https://voro.uz/vagent";   // INTEGRATSIYA: voro.uz API manzil
 const qp = new URLSearchParams(location.search);
 const AUTH = { uid: qp.get("uid")||"", exp: qp.get("exp")||"", sig: qp.get("sig")||"", lang: (["uz","ru","en"].includes(qp.get("lang"))?qp.get("lang"):"uz") };
 const I18N = {
-  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami" },
-  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого" },
-  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total" },
+  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans" },
+  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс" },
+  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance" },
 };
 let VT = I18N[AUTH.lang] || I18N.uz;
 function applyLang(){ try{
@@ -587,7 +594,7 @@ const chat = document.getElementById("chat");
 const inp = document.getElementById("inp");
 const sendBtn = document.getElementById("send");
 const ava = document.getElementById("ava");
-const hstatus = document.getElementById("hstatus");
+const sectName = ava ? ava.querySelector("b") : null;
 const balEl = document.getElementById("bal");
 const attbar = document.getElementById("attbar");
 const fileInp = document.getElementById("file");
@@ -602,9 +609,11 @@ function hideEmpty(){document.getElementById("empty")?.remove();}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function md(s){return esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");}
 function setState(s,text){
-  ava.className="ava"+(s?" "+s:"");
-  if(s&&text){hstatus.classList.remove("online");hstatus.textContent=text;}
-  else{hstatus.classList.add("online");hstatus.textContent="online";}
+  if(ava) ava.className="sect"+(s?" "+s:"");
+  if(sectName){
+    if(s&&text){ sectName.textContent=text; }
+    else{ sectName.textContent="Vagent"; }
+  }
 }
 function setBal(v){if(v!==undefined&&v!==null)balEl.textContent=v;}
 
@@ -812,13 +821,16 @@ function renderOptions(d){
 // ===== TASDIQ KARTASI =====
 function renderConfirm(d){
   const jobs=(d.jobs||[]).map(j=>
-    `<div class="cc-job"><span>${esc(j.label||"")}</span><span>${j.price??"?"} ${ic('star',13)}</span></div>`).join("");
+    `<div class="cc-job"><span>${esc(j.label||"")}</span><span class="cc-jp">${j.price!=null?j.price+" "+ic('star',13):""}</span></div>`).join("");
+  const balLine=(d.balance!=null)
+    ? `<div class="cc-bal"><span>${VT.bal_label}</span><span><span class="star">${ic('star',13)}</span> ${d.balance}</span></div>` : "";
   const card=el(`
     <div class="confirm-card">
       <div class="cc-title">${ic('card',18)} ${VT.cc_title}</div>
-      <div>${esc(d.summary||"")}</div>
-      <div>${jobs}</div>
+      ${d.summary?`<div class="cc-sum">${esc(d.summary)}</div>`:""}
+      <div class="cc-jobs">${jobs}</div>
       <div class="cc-total"><span>${VT.total}</span><span><span class="star">${ic('star',15)}</span> ${d.total}</span></div>
+      ${balLine}
       <div class="cc-btns">
         <button class="btn-no">${VT.no}</button>
         <button class="btn-yes">${VT.yes}</button>
@@ -826,13 +838,18 @@ function renderConfirm(d){
       <div class="cc-answered"></div>
     </div>`);
   card.querySelector(".btn-yes").onclick=()=>{
+    if(busy)return;
     card.classList.add("answered");
-    card.querySelector(".cc-answered").innerHTML=ic('check',15)+" Tasdiqlandi";card.querySelector(".cc-answered").style.display="flex";
+    const a=card.querySelector(".cc-answered");
+    a.innerHTML=ic('check',15)+" "+VT.confirmed;a.style.display="flex";
+    tg?.HapticFeedback?.notificationOccurred("success");
     sendMsg({text:"",silent:true,confirm_token:d.token});
   };
   card.querySelector(".btn-no").onclick=()=>{
+    if(busy)return;
     card.classList.add("answered");
-    card.querySelector(".cc-answered").innerHTML=ic('x',15)+" Bekor qilindi";card.querySelector(".cc-answered").style.display="flex";
+    const a=card.querySelector(".cc-answered");
+    a.innerHTML=ic('x',15)+" "+VT.cancelled;a.style.display="flex";
     sendMsg({text:"",silent:true,decline:true});
   };
   chat.appendChild(card);scrollDown();
@@ -841,8 +858,8 @@ function renderConfirm(d){
 // ===== NATIJA KARTASI =====
 function renderResult(d){
   const media=d.kind==="video"
-    ?`<video src="${d.url}" controls playsinline></video>`
-    :`<img src="${d.url}" alt="">`;
+    ?`<video src="${d.url}" controls playsinline referrerpolicy="no-referrer"></video>`
+    :`<img src="${d.url}" alt="" referrerpolicy="no-referrer" loading="lazy">`;
   chat.appendChild(el(`
     <div class="result-card">
       ${media}
