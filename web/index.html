@@ -412,5 +412,39 @@ lucide-react/dist/esm/lucide-react.js:
   };
 })();
 </script>
+<!-- Voro Vagent kirish tugmasi (sayt) -->
+<style>
+#voro-vfab{position:fixed;right:18px;bottom:96px;z-index:9980;width:56px;height:56px;border-radius:50%;
+  display:grid;place-items:center;cursor:pointer;border:1px solid rgba(255,255,255,.16);
+  background:linear-gradient(160deg,rgba(38,40,48,.92),rgba(10,12,16,.92));backdrop-filter:blur(14px);
+  box-shadow:0 6px 18px rgba(0,0,0,.45),0 0 14px rgba(43,212,255,.25);
+  transition:transform .25s cubic-bezier(.32,1.4,.4,1),box-shadow .25s;font-size:26px;line-height:1}
+#voro-vfab:hover{transform:scale(1.08);box-shadow:0 8px 22px rgba(0,0,0,.5),0 0 22px rgba(43,212,255,.45)}
+#voro-vfab:active{transform:scale(.94)}
+#voro-vfab .vlbl{position:absolute;right:64px;white-space:nowrap;font-size:12.5px;font-weight:700;
+  color:#EAF2FB;background:rgba(10,12,16,.9);border:1px solid rgba(255,255,255,.14);border-radius:999px;
+  padding:6px 12px;opacity:0;pointer-events:none;transition:opacity .2s}
+#voro-vfab:hover .vlbl{opacity:1}
+@media (max-width:760px){#voro-vfab{bottom:150px}}
+</style>
+<script>
+(function(){
+  function mk(){
+    if(document.getElementById("voro-vfab"))return;
+    var b=document.createElement("button"); b.id="voro-vfab";
+    b.innerHTML='🤖<span class="vlbl">Vagent — AI yordamchi</span>';
+    b.onclick=function(){
+      b.style.opacity=".6";
+      fetch("/api/vagent-link",{credentials:"include"})
+        .then(function(r){return r.json();})
+        .then(function(d){ if(d&&d.url){ location.href=d.url; } else { b.style.opacity="1"; } })
+        .catch(function(){ b.style.opacity="1"; });
+    };
+    document.body.appendChild(b);
+  }
+  // faqat login qilganlarga ko'rsatamiz
+  fetch("/api/me",{credentials:"include"}).then(function(r){ if(r.ok) mk(); }).catch(function(){});
+})();
+</script>
 </body>
 </html>

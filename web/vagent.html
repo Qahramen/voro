@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Vagent — Voro AI rejissyor</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   /* ================================================================
      LIQUID GLASS DIZAYN TIZIMI (iOS 26 uslubi)
@@ -12,26 +13,26 @@
      har panel ustki qirradan yoritiladi; hamma narsa suzadi.
      ================================================================ */
   :root{
-    --bg:#05070D;
+    --bg:#070809;
     --text:#F4F7FC; --dim:rgba(220,230,248,.62);
-    --cyan:#6FD3FF; --mint:#4AE3B5; --violet:#9D8CFF; --red:#FF7A8A;
+    --cyan:#2BD4FF; --mint:#4AE3B5; --violet:#9D8CFF; --red:#FF7A8A;
     --icon:#AAB6C8;                          /* yagona icon rangi — och kulrang */
 
     /* Shisha materiallar */
-    --glass:rgba(255,255,255,.07);
+    --glass:rgba(255,255,255,.055);
     --glass-strong:rgba(255,255,255,.11);
     --glass-border:rgba(255,255,255,.16);
     --glass-top:rgba(255,255,255,.32);      /* ustki qirra nuri */
-    --blur:blur(26px) saturate(1.9);
+    --blur:blur(26px) saturate(1.6);
 
-    --r:24px; --r-pill:999px;
+    --r:16px; --r-pill:999px;
     --spring:cubic-bezier(.32,1.4,.35,1);
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;overscroll-behavior:none;}
   body{
     background:var(--bg); color:var(--text);
-    font:15px/1.5 -apple-system,"SF Pro Text","SF Pro Display",Roboto,sans-serif;
+    font:15px/1.5 "Inter",-apple-system,"SF Pro Text","SF Pro Display",Roboto,sans-serif;
     display:flex;flex-direction:column;position:relative;overflow:hidden;
   }
 

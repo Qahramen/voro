@@ -175,14 +175,57 @@ def _locked_update(path: str, default: Any, fn):
 # BALANS — INTEGRATSIYA: botdagi helper bo'lsa, shuni import qiling
 # ============================================================
 
+_WEB_DB = os.environ.get("VORO_WEB_DB", "/opt/voro-web/voro_web.db")
+
+def _is_web(uid) -> bool:
+    return str(uid).startswith("web:")
+
+def _web_id(uid) -> int:
+    return int(str(uid).split(":", 1)[1])
+
+def _web_conn():
+    import sqlite3
+    c = sqlite3.connect(_WEB_DB, timeout=10)
+    c.row_factory = sqlite3.Row
+    return c
+
+def _web_get_balance(uid) -> int:
+    try:
+        with _web_conn() as c:
+            r = c.execute("SELECT balance FROM users WHERE id=?", (_web_id(uid),)).fetchone()
+            return int(r["balance"]) if r else 0
+    except Exception:
+        return 0
+
+def _web_deduct(uid, amount: int) -> bool:
+    try:
+        with _web_conn() as c:
+            cur = c.execute("UPDATE users SET balance=balance-? WHERE id=? AND balance>=?",
+                            (amount, _web_id(uid), amount))
+            return cur.rowcount == 1
+    except Exception:
+        return False
+
+def _web_refund(uid, amount: int) -> None:
+    try:
+        with _web_conn() as c:
+            c.execute("UPDATE users SET balance=balance+? WHERE id=?", (amount, _web_id(uid)))
+    except Exception:
+        pass
+
+
 def _credit_key(u: dict) -> str:
     return "credits" if "credits" in u else ("tangacha" if "tangacha" in u else "credits")
 
 def get_balance(user_id: str) -> int:
+    if _is_web(user_id):
+        return _web_get_balance(user_id)
     u = _locked_read(USERS_JSON, {}).get(str(user_id), {})
     return int(u.get(_credit_key(u), 0))
 
 def deduct_credits(user_id: str, amount: int) -> bool:
+    if _is_web(user_id):
+        return _web_deduct(user_id, amount)
     def fn(users):
         u = users.setdefault(str(user_id), {})
         k = _credit_key(u)
@@ -193,6 +236,8 @@ def deduct_credits(user_id: str, amount: int) -> bool:
     return _locked_update(USERS_JSON, {}, fn)
 
 def refund_credits(user_id: str, amount: int) -> None:
+    if _is_web(user_id):
+        _web_refund(user_id, amount); return
     def fn(users):
         u = users.setdefault(str(user_id), {})
         k = _credit_key(u)

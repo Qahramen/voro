@@ -876,6 +876,22 @@ except Exception as _ve:
     print("[vagent] router yuklanmadi:", _ve)
 
 
+@app.get("/vagent-link")
+async def vagent_link(request: Request, u=Depends(current_user)):
+    """Sayt foydalanuvchisi uchun imzolangan Vagent URL (web hamyon: SQLite)."""
+    if not u:
+        return err("Kirish talab qilinadi", 401)
+    _vsec = os.getenv("VORO_BOT_SECRET", "")
+    if not _vsec:
+        return err("Vagent sozlanmagan", 503)
+    _uid = f"web:{u['id']}"
+    _exp = str(int(time.time()) + 3600)
+    _sig = hmac.new(_vsec.encode(), f"{_uid}:{_exp}".encode(), hashlib.sha256).hexdigest()
+    _lang = (request.headers.get("x-lang") or "uz")[:2].lower()
+    _lang = _lang if _lang in ("uz", "ru", "en") else "uz"
+    return {"url": f"/vagent.html?uid={_uid}&exp={_exp}&sig={_sig}&lang={_lang}"}
+
+
 @app.post("/auth/register")
 async def register(request: Request):
     b = await request.json()
