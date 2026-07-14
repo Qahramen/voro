@@ -653,20 +653,31 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
     async def on_progress(elapsed, pct):
         await emit("progress", {"label": label, "elapsed": elapsed, "pct": pct})
 
-    try:
-        job_id = await atlas_create_job(j["kind"], j["model"], payload)
-        result = await atlas_poll_job(job_id, on_progress=on_progress)
-    except Exception as e:
-        refund_credits(uid, price)
-        track(uid, "gen_fail", {"price": price, "model": j["model"], "error": str(e)[:100]})
-        return {"label": label, "error": f"Atlas xatosi: {e}. {price} tangacha qaytarildi."}
+    # AVTO QAYTA-URINISH: Atlas modellari (ayniqsa nano-banana) ba'zan bir xil
+    # so'rovga "Request parameters are invalid" kabi VAQTINCHALIK xato beradi.
+    # Foydalanuvchiga xato ko'rsatishdan oldin jimgina 2-3 marta qayta urinamiz.
+    _retry_msg = {"uz": "Qayta urinyapman…", "ru": "Пробую ещё раз…", "en": "Retrying…"}
+    max_attempts = 3 if j["kind"] == "image" else 2
+    result, last_err = None, None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            job_id = await atlas_create_job(j["kind"], j["model"], payload)
+            result = await atlas_poll_job(job_id, on_progress=on_progress)
+            if result.get("status") == "ok":
+                break
+            last_err = result.get("error")
+        except Exception as e:
+            result, last_err = None, str(e)
+        if attempt < max_attempts:
+            await emit("status", {"text": _retry_msg.get(getattr(sess, "lang", "uz"), _retry_msg["uz"])})
+            await asyncio.sleep(1.5)
 
-    if result["status"] != "ok":
+    if not result or result.get("status") != "ok":
         refund_credits(uid, price)
         track(uid, "gen_fail", {"price": price, "model": j["model"],
-                                "error": str(result.get("error"))[:100]})
+                                "error": str(last_err)[:100], "attempts": max_attempts})
         return {"label": label,
-                "error": f"Muvaffaqiyatsiz: {result.get('error')}. {price} tangacha qaytarildi."}
+                "error": f"Muvaffaqiyatsiz: {last_err}. {price} tangacha qaytarildi."}
 
     track(uid, "gen_ok", {"price": price, "model": j["model"], "kind": j["kind"]})
     entry = {"label": label, "model": j["model"], "price": price,
