@@ -148,6 +148,22 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.18);
     animation:appear .4s var(--spring);}
 
+  /* Jarayon indikatori — "yozayapti" (embed'da header yashirin, shu ko'rinadi) */
+  .typing{align-self:flex-start;display:flex;align-items:center;gap:9px;
+    max-width:85%;padding:11px 16px;border-radius:20px;border-bottom-left-radius:7px;
+    background:var(--glass);border:1px solid var(--glass-border);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    box-shadow:inset 0 1px 0 var(--glass-top);
+    animation:appear .3s var(--spring);}
+  .typing .tdots{display:inline-flex;gap:5px;flex:none;}
+  .typing .tdots i{width:7px;height:7px;border-radius:50%;background:var(--cyan);
+    opacity:.4;animation:tbounce 1.15s ease-in-out infinite;}
+  .typing .tdots i:nth-child(2){animation-delay:.16s;}
+  .typing .tdots i:nth-child(3){animation-delay:.32s;}
+  .typing .tlabel{font-size:13.5px;color:var(--dim);}
+  @keyframes tbounce{0%,65%,100%{transform:translateY(0);opacity:.35}
+                     30%{transform:translateY(-5px);opacity:1}}
+
   /* Progress — shisha naycha ichida oquvchi suyuqlik */
   .prog{align-self:stretch;padding:11px 15px;border-radius:18px;font-size:13px;
         background:var(--glass);
@@ -444,9 +460,9 @@ window.addEventListener("message",function(e){
   if(e&&e.data&&e.data.t==="vgpadb") applyPadb(e.data.v);
 });
 const I18N = {
-  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans" },
-  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс" },
-  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance" },
+  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans", thinking:"O'ylayapman" },
+  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс", thinking:"Думаю" },
+  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance", thinking:"Thinking" },
 };
 let VT = I18N[AUTH.lang] || I18N.uz;
 function applyLang(){ try{
@@ -653,6 +669,18 @@ function setState(s,text){
 }
 function setBal(v){if(v!==undefined&&v!==null)balEl.textContent=v;}
 
+// ===== JARAYON INDIKATORI (yozayapti / ishlayapti) =====
+let typingEl=null;
+function showTyping(label){
+  if(!typingEl) typingEl=el(`<div class="typing"><span class="tdots"><i></i><i></i><i></i></span><span class="tlabel"></span></div>`);
+  const lb=typingEl.querySelector(".tlabel");
+  lb.textContent=label||"";
+  lb.style.display=label?"":"none";
+  chat.appendChild(typingEl);   // har doim eng pastga
+  scrollDown();
+}
+function hideTyping(){ if(typingEl){typingEl.remove();} }
+
 inp.addEventListener("input",()=>{inp.style.height="auto";inp.style.height=Math.min(inp.scrollHeight,110)+"px";});
 inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}});
 function quick(b){inp.value=b.textContent;sendMsg();}
@@ -766,6 +794,7 @@ sendBtn.onclick=()=>sendMsg();
 async function stream(payload){
   busy=true;sendBtn.disabled=true;
   setState("thinking","O'ylayapman…");
+  showTyping(VT.thinking+"…");
   tg?.HapticFeedback?.impactOccurred("light");
   let botMsg=null,botBuf="";
 
@@ -797,39 +826,41 @@ async function stream(payload){
   }catch(e){
     chat.appendChild(el(`<div class="err">Aloqa uzildi — natijalar yo'qolmaydi, ilova qayta ochilganda keladi. (${esc(String(e))})</div>`));
   }
-  busy=false;sendBtn.disabled=false;setState("","");scrollDown();
+  busy=false;sendBtn.disabled=false;setState("","");hideTyping();scrollDown();
 
   function handle(ev,d){
     if(ev==="text"){
-      if(!botMsg){botMsg=el(`<div class="msg bot"></div>`);chat.appendChild(botMsg);}
+      if(!botMsg){hideTyping();botMsg=el(`<div class="msg bot"></div>`);chat.appendChild(botMsg);}
       botBuf+=d.delta;botMsg.innerHTML=md(botBuf);scrollDown();
     }
     else if(ev==="status"){
       botMsg=null;botBuf="";setState("working",d.text);
-      chat.appendChild(el(`<div class="status-chip">${esc(stripEmoji(d.text))}</div>`));scrollDown();
+      // Statusni ANIMATSIYALI indikator sifatida ko'rsatamiz (embed'da header yashirin)
+      showTyping(stripEmoji(d.text));
     }
     else if(ev==="progress"){
+      hideTyping();
       let row=progRows[d.label];
       if(!row){
         row=el(`<div class="prog"><div class="p-top"><span>${esc(d.label)}</span><span class="p-t"></span></div><div class="p-bar"><div class="p-fill"></div></div></div>`);
         progRows[d.label]=row;chat.appendChild(row);scrollDown();
       }
-      row.querySelector(".p-t").textContent=`${d.elapsed}s`;
-      const pct=d.pct??Math.min(90,d.elapsed/1.8);
+      const pct=d.pct??Math.min(95,8+d.elapsed*1.7);
+      row.querySelector(".p-t").textContent=`${Math.round(pct)}% · ${d.elapsed}s`;
       row.querySelector(".p-fill").style.width=pct+"%";
     }
-    else if(ev==="confirm"){botMsg=null;botBuf="";renderConfirm(d);
+    else if(ev==="confirm"){hideTyping();botMsg=null;botBuf="";renderConfirm(d);
       tg?.HapticFeedback?.notificationOccurred("warning");}
     else if(ev==="result"){
-      botMsg=null;botBuf="";
+      hideTyping();botMsg=null;botBuf="";
       const row=progRows[d.label];if(row){row.remove();delete progRows[d.label];}
       renderResult(d);setBal(d.balance);
       localStorage.setItem("vg_since",String(Math.floor(Date.now()/1000)));
       tg?.HapticFeedback?.notificationOccurred("success");
     }
     else if(ev==="balance"){setBal(d.balance);}
-    else if(ev==="options"){botMsg=null;botBuf="";renderOptions(d);}
-    else if(ev==="error"){botMsg=null;botBuf="";
+    else if(ev==="options"){hideTyping();botMsg=null;botBuf="";renderOptions(d);}
+    else if(ev==="error"){hideTyping();botMsg=null;botBuf="";
       chat.appendChild(el(`<div class="err">${esc(d.text)}</div>`));scrollDown();}
   }
 }
