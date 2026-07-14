@@ -412,35 +412,96 @@ lucide-react/dist/esm/lucide-react.js:
   };
 })();
 </script>
-<!-- Voro Vagent kirish tugmasi (sayt) -->
+<!-- Voro Vagent — sayt ichida (iframe overlay, sahifa almashmaydi) -->
 <script>
 (function(){
   var ICON16='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><circle cx="9" cy="14" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.2" fill="currentColor" stroke="none"/><path d="M12 8V4.5M8.5 4.5h7"/></svg>';
-  var ICON20=ICON16.replace(/width="16" height="16"/,'width="20" height="20"');
-  function openVagent(){
-    fetch("/api/vagent-link",{credentials:"include"}).then(function(r){return r.json();}).then(function(d){
-      if(d&&d.url){ location.href=d.url; }
-      else { alert("Vagent — avval saytga kiring (Sign in)."); }
-    }).catch(function(){ alert("Vagent — avval saytga kiring (Sign in)."); });
+  var overlay=null, frame=null, linkUrl=null, loading=false, shown=false;
+
+  function ensureOverlay(){
+    if(overlay) return overlay;
+    overlay=document.createElement("div");
+    overlay.id="voro-vagent-overlay";
+    overlay.style.cssText="position:fixed;left:0;right:0;z-index:35;display:none;background:#070809;";
+    frame=document.createElement("iframe");
+    frame.id="voro-vagent-frame";
+    frame.setAttribute("allow","microphone; clipboard-write");
+    frame.setAttribute("title","Vagent");
+    frame.style.cssText="width:100%;height:100%;border:0;display:block;background:#070809;";
+    overlay.appendChild(frame);
+    document.body.appendChild(overlay);
+    window.addEventListener("resize",position);
+    return overlay;
   }
-  function add(){
+  function calcPadb(){
+    var dock=document.querySelector("nav.dock");
+    if(!dock) return 0;
+    var dr=dock.getBoundingClientRect();
+    return Math.max(0,Math.round(window.innerHeight-dr.top)+14);
+  }
+  function position(){
+    if(!overlay) return;
+    var nav=document.querySelector("nav.top-nav");
+    var wrap=nav?(nav.closest("header")||nav.parentElement):null;
+    var top=wrap?Math.round(wrap.getBoundingClientRect().bottom):56;
+    overlay.style.top=top+"px";
+    overlay.style.bottom="0px";           // fon pastgacha yopadi
+    var padb=calcPadb();                  // composer'ni dock ustiga surish
+    if(frame&&frame.contentWindow){ try{ frame.contentWindow.postMessage({t:"vgpadb",v:padb},"*"); }catch(e){} }
+  }
+  function setActive(on){
+    var b=document.getElementById("voro-vnav");
+    if(!b) return;
+    if(on){ b.style.color="#2BD4FF"; b.style.background="rgba(43,212,255,0.12)"; b.style.boxShadow="rgba(43,212,255,0.22) 0px 0px 0px 1px inset"; }
+    else { b.style.color=""; b.style.background=""; b.style.boxShadow=""; }
+  }
+  function show(){
+    ensureOverlay(); position();
+    overlay.style.display="block"; shown=true; setActive(true);
+    document.body.style.overflow="hidden";
+  }
+  function hide(){
+    if(overlay) overlay.style.display="none";
+    shown=false; setActive(false);
+    document.body.style.overflow="";
+  }
+  function openVagent(){
+    if(linkUrl){ show(); return; }
+    if(loading) return; loading=true;
+    fetch("/api/vagent-link",{credentials:"include"}).then(function(r){return r.json();}).then(function(d){
+      loading=false;
+      if(d&&d.url){ linkUrl=d.url+(d.url.indexOf("?")>=0?"&":"?")+"embed=1&padb="+calcPadb(); ensureOverlay(); frame.src=linkUrl; show(); }
+      else { alert("Vagent — avval saytga kiring (Sign in)."); }
+    }).catch(function(){ loading=false; alert("Vagent — avval saytga kiring (Sign in)."); });
+  }
+
+  function addNav(){
     try{
-      // 1) TEPA NAV
       var nav=document.querySelector("nav.top-nav");
       if(nav && !document.getElementById("voro-vnav")){
         var tpl=[].slice.call(nav.querySelectorAll("button.tap")).pop();
         var b=document.createElement("button");
-        b.id="voro-vnav"; b.className="tap";
+        b.id="voro-vnav"; b.className="tap"; b.type="button";
         if(tpl) b.setAttribute("style", tpl.getAttribute("style")||"");
         b.innerHTML=ICON16+'<span class="hide-xs">Vagent</span>';
-        b.onclick=openVagent;
+        b.onclick=function(e){ e.preventDefault(); e.stopPropagation(); openVagent(); };
         nav.appendChild(b);
       }
     }catch(e){}
   }
-  var obs=new MutationObserver(add);
+
+  // Boshqa nav/dock/brand tugmasi bosilsa Vagent yopiladi (saytga qaytadi)
+  document.addEventListener("click",function(e){
+    if(!shown) return;
+    var b=e.target.closest ? e.target.closest("button") : null;
+    if(!b) return;
+    if(b.id==="voro-vnav") return;
+    if(b.classList.contains("tap")||b.classList.contains("dock-item")) hide();
+  }, true);
+
+  var obs=new MutationObserver(addNav);
   obs.observe(document.body,{childList:true,subtree:true});
-  add();
+  addNav();
 })();
 </script>
 </body>

@@ -102,6 +102,10 @@
     animation:pulse 2.4s ease-in-out infinite;}
   .sect.thinking .dot,.sect.working .dot{background:var(--cyan);box-shadow:0 0 8px rgba(43,212,255,.9);}
   @media(max-width:359px){.brand-txt{display:none;}}
+  /* EMBED: sayt ichida (iframe) — Vagent o'z header'ini yashiradi, sayt navi bor */
+  html.embed header.topbar{display:none;}
+  html.embed #chat{padding-top:16px;}
+  html.embed .blobs{opacity:.6;}
   .balance{display:flex;align-items:center;gap:6px;padding:8px 14px;
            border-radius:var(--r-pill);font-weight:700;font-size:14px;
            background:var(--glass-strong);
@@ -407,6 +411,15 @@ const API_BASE = "https://voro.uz/vagent";   // INTEGRATSIYA: voro.uz API manzil
 // ===== AUTH (HMAC URL parametrlari) =====
 const qp = new URLSearchParams(location.search);
 const AUTH = { uid: qp.get("uid")||"", exp: qp.get("exp")||"", sig: qp.get("sig")||"", lang: (["uz","ru","en"].includes(qp.get("lang"))?qp.get("lang"):"uz") };
+// EMBED: Vagent sayt ichida (iframe) ochilganda o'z header'ini yashiradi — sayt navi bor
+const EMBED = qp.get("embed")==="1";
+if(EMBED) document.documentElement.classList.add("embed");
+// padb: sayt pastki dock'i ustidan composer'ni surish uchun (parent'dan keladi)
+function applyPadb(v){ v=parseInt(v,10)||0; document.body.style.paddingBottom=v>0?(v+"px"):""; }
+if(EMBED) applyPadb(qp.get("padb"));
+window.addEventListener("message",function(e){
+  if(e&&e.data&&e.data.t==="vgpadb") applyPadb(e.data.v);
+});
 const I18N = {
   uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans" },
   ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс" },
@@ -856,10 +869,18 @@ function renderConfirm(d){
 }
 
 // ===== NATIJA KARTASI =====
+// atlas-media (OSS) hotlink himoyasi tufayli rasm/video voro.uz proxy orqali
+// yuklanadi (same-origin) — Telegram/har qanday brauzerda HAR DOIM ko'rinadi.
+function mediaUrl(u){
+  try{ if(new URL(u).hostname.endsWith("aliyuncs.com"))
+        return API_BASE+"/img?u="+encodeURIComponent(u); }catch(e){}
+  return u;
+}
 function renderResult(d){
+  const src=mediaUrl(d.url);
   const media=d.kind==="video"
-    ?`<video src="${d.url}" controls playsinline referrerpolicy="no-referrer"></video>`
-    :`<img src="${d.url}" alt="" referrerpolicy="no-referrer" loading="lazy">`;
+    ?`<video src="${src}" controls playsinline></video>`
+    :`<img src="${src}" alt="" loading="lazy">`;
   chat.appendChild(el(`
     <div class="result-card">
       ${media}
@@ -867,7 +888,7 @@ function renderResult(d){
         <span class="rc-label">${esc(d.label||"Natija")}</span>
         <span class="rc-price">-${d.price} ${ic('star',13)}</span>
       </div>
-      <a class="rc-dl" href="${d.url}" target="_blank" download>${ic('dl',16)} Yuklab olish</a>
+      <a class="rc-dl" href="${src}" target="_blank" download>${ic('dl',16)} Yuklab olish</a>
     </div>`));
   scrollDown();
 }

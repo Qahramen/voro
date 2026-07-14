@@ -1167,6 +1167,52 @@ async def vagent_file(name: str):
     return FileResponse(path)
 
 
+# atlas-media (Aliyun OSS) hotlink himoyasini chetlab o'tish uchun allowlist
+_MEDIA_HOSTS = (
+    "atlas-media.oss-us-west-1.aliyuncs.com",
+    "atlas-media.oss-accelerate.aliyuncs.com",
+)
+
+
+@vagent_router.get("/img")
+async def vagent_img(u: str):
+    """Natija rasm/video'sini voro.uz orqali (Referer'siz) uzatamiz.
+    Sabab: atlas-media OSS'da hotlink himoyasi bor — voro.uz Referer bilan 403.
+    Same-origin proxy tufayli rasm Telegram/har qanday brauzerda HAR DOIM ko'rinadi."""
+    from urllib.parse import urlparse
+    try:
+        p = urlparse(u)
+    except Exception:
+        return {"ok": False, "error": "bad url"}
+    if p.scheme != "https" or (p.hostname or "") not in _MEDIA_HOSTS:
+        return {"ok": False, "error": "host not allowed"}
+    try:
+        client = httpx.AsyncClient(timeout=90, follow_redirects=True)
+        req = client.build_request("GET", u)   # MUHIM: Referer yubormaymiz
+        r = await client.send(req, stream=True)
+        if r.status_code != 200:
+            code = r.status_code
+            await r.aclose()
+            await client.aclose()
+            return {"ok": False, "error": f"upstream {code}"}
+        ctype = r.headers.get("content-type", "application/octet-stream")
+
+        async def body():
+            try:
+                async for chunk in r.aiter_bytes():
+                    yield chunk
+            finally:
+                await r.aclose()
+                await client.aclose()
+
+        return StreamingResponse(body(), media_type=ctype, headers={
+            "Cache-Control": "public, max-age=604800",
+            "Access-Control-Allow-Origin": "*",
+        })
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:150]}
+
+
 @vagent_router.post("/voice")
 async def vagent_voice(body: UploadIn):
     """Ovozli buyruq → matn (Groq Whisper)."""
