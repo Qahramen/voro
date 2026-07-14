@@ -279,15 +279,21 @@
     animation:appear .4s var(--spring);}
 
   /* ---------- BIRIKTIRMALAR ---------- */
-  #attbar{display:none;gap:9px;flex-wrap:wrap;z-index:29;
-    position:fixed;left:50%;transform:translateX(-50%);
-    bottom:calc(var(--padb) + env(safe-area-inset-bottom) + 86px);
-    width:min(calc(100% - 24px),760px);padding:0 8px;}
+  /* Attachment bar composer ICHIDA — kartadan chiqmaydi, doim to'g'ri joyda */
+  #attbar{display:none;gap:9px;flex-wrap:wrap;padding:2px 2px 2px;}
   #attbar.show{display:flex;}
   .att-chip{position:relative;width:58px;height:58px;border-radius:16px;overflow:hidden;
+    flex:none;
     border:1px solid var(--glass-border);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 6px 16px rgba(2,6,16,.4);}
   .att-chip img{width:100%;height:100%;object-fit:cover;}
+  /* yuklanish paytida chip ustida spinner */
+  .att-chip.loading::after{content:"";position:absolute;inset:0;
+    background:rgba(6,10,18,.55);}
+  .att-chip.loading::before{content:"";position:absolute;z-index:2;
+    top:50%;left:50%;width:22px;height:22px;margin:-11px 0 0 -11px;
+    border:2.5px solid rgba(255,255,255,.25);border-top-color:var(--cyan);
+    border-radius:50%;animation:spin .8s linear infinite;}
   .att-chip .x{position:absolute;top:3px;right:3px;width:19px;height:19px;
     border-radius:50%;font-size:11px;line-height:1;color:#fff;border:none;
     background:rgba(10,14,24,.65);color:var(--icon);
@@ -301,8 +307,9 @@
     bottom:calc(var(--padb) + env(safe-area-inset-bottom));
     width:min(calc(100% - 24px),760px);
     padding:8px;border-radius:calc(var(--r) + 4px);
-    display:flex;gap:8px;align-items:flex-end;
+    display:flex;flex-direction:column;gap:8px;
   }
+  .composer-row{display:flex;gap:8px;align-items:flex-end;}
   .icon-btn{width:44px;height:44px;flex:none;border-radius:16px;
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;color:var(--icon);
@@ -424,6 +431,32 @@
     display:flex;align-items:center;justify-content:center;}
   .hi-del:active{background:rgba(255,90,110,.16);color:var(--red);}
   .hist-empty{padding:18px;text-align:center;color:var(--dim);font-size:13px;}
+
+  /* ---------- GENERATSIYA SKELETON (modellardagidek) ---------- */
+  .gen-skel{align-self:flex-start;max-width:min(100%,380px);width:100%;
+    border-radius:var(--r);overflow:hidden;
+    background:var(--glass);border:1px solid var(--glass-border);
+    box-shadow:inset 0 1px 0 var(--glass-top), 0 12px 34px rgba(2,6,16,.4);
+    animation:appear .4s var(--spring);}
+  .gs-media{position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;
+    background:linear-gradient(110deg,#0d1420 8%,#1a2536 20%,#0d1420 34%);
+    background-size:220% 100%;animation:shimmer 1.5s linear infinite;}
+  @keyframes shimmer{to{background-position:-220% 0}}
+  .gs-badge{position:absolute;bottom:10px;left:10px;padding:5px 12px;border-radius:99px;
+    background:rgba(6,10,18,.62);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    font-size:13px;font-weight:800;color:#fff;display:flex;align-items:center;gap:7px;}
+  .gs-badge::before{content:"";width:12px;height:12px;flex:none;
+    border:2px solid rgba(255,255,255,.3);border-top-color:var(--cyan);
+    border-radius:50%;animation:spin .8s linear infinite;}
+  .gs-foot{display:flex;justify-content:space-between;align-items:center;
+    padding:10px 14px 6px;font-size:13px;}
+  .gs-label{font-weight:600;color:var(--text);}
+  .gs-t{color:var(--dim);font-weight:600;}
+  .gs-bar{height:5px;margin:0 14px 12px;border-radius:99px;overflow:hidden;
+    background:rgba(255,255,255,.08);}
+  .gs-fill{height:100%;width:6%;border-radius:99px;transition:width .5s;
+    background:linear-gradient(90deg,var(--cyan),var(--mint));
+    box-shadow:0 0 10px rgba(43,212,255,.6);}
 </style>
 </head>
 <body>
@@ -467,14 +500,15 @@
   </div>
 </div>
 
-<div id="attbar"></div>
-
 <footer class="glass">
-  <input type="file" id="file" accept="image/*" multiple hidden>
-  <button class="icon-btn" id="attach" title="Rasm biriktirish"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12.6 20a5.4 5.4 0 0 1-7.6-7.6L13.8 3.6a3.6 3.6 0 0 1 5 5L10 17.4a1.8 1.8 0 0 1-2.5-2.5l8-8"/></svg></button>
-  <button class="icon-btn" id="mic" title="Gapirib buyurish"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-  <textarea id="inp" rows="1" placeholder="G'oyangni yoz yoki gapir..."></textarea>
-  <button id="send"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+  <div id="attbar"></div>
+  <div class="composer-row">
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <button class="icon-btn" id="attach" title="Rasm biriktirish"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12.6 20a5.4 5.4 0 0 1-7.6-7.6L13.8 3.6a3.6 3.6 0 0 1 5 5L10 17.4a1.8 1.8 0 0 1-2.5-2.5l8-8"/></svg></button>
+    <button class="icon-btn" id="mic" title="Gapirib buyurish"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <textarea id="inp" rows="1" placeholder="G'oyangni yoz yoki gapir..."></textarea>
+    <button id="send"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+  </div>
 </footer>
 
 <script>
@@ -867,7 +901,7 @@ fileInp.onchange=async()=>{
     if(attachments.length>=4)break;
     const b64=await new Promise(res=>{const r=new FileReader();
       r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(f);});
-    const chip=el(`<div class="att-chip"><img src="data:${f.type};base64,${b64}"><button class="x">${ic('x',11)}</button></div>`);
+    const chip=el(`<div class="att-chip loading"><img src="data:${f.type};base64,${b64}"><button class="x">${ic('x',11)}</button></div>`);
     attbar.appendChild(chip);attbar.classList.add("show");
     const entry={url:null,elm:chip};attachments.push(entry);
     chip.querySelector(".x").onclick=()=>{attachments=attachments.filter(a=>a!==entry);chip.remove();
@@ -877,7 +911,7 @@ fileInp.onchange=async()=>{
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({...AUTH,data_b64:b64,mime:f.type})});
       const d=await r.json();
-      if(d.ok)entry.url=d.url;
+      if(d.ok){entry.url=d.url;chip.classList.remove("loading");}
       else{chip.remove();attachments=attachments.filter(a=>a!==entry);
            chat.appendChild(el(`<div class="err">Rasm yuklanmadi: ${esc(d.error||"")}</div>`));}
     }catch{chip.remove();attachments=attachments.filter(a=>a!==entry);}
@@ -984,6 +1018,8 @@ async function stream(payload){
     chat.appendChild(el(`<div class="err">Aloqa uzildi — natijalar yo'qolmaydi, ilova qayta ochilganda keladi. (${esc(String(e))})</div>`));
   }
   flushBot();
+  // qolgan skeletonlarni tozalaymiz (masalan generatsiya muvaffaqiyatsiz tugasa)
+  Object.keys(progRows).forEach(k=>{progRows[k].remove();delete progRows[k];});
   busy=false;sendBtn.disabled=false;setState("","");hideTyping();scrollDown();
 
   function handle(ev,d){
@@ -1000,12 +1036,13 @@ async function stream(payload){
       hideTyping();
       let row=progRows[d.label];
       if(!row){
-        row=el(`<div class="prog"><div class="p-top"><span>${esc(d.label)}</span><span class="p-t"></span></div><div class="p-bar"><div class="p-fill"></div></div></div>`);
+        row=el(`<div class="gen-skel"><div class="gs-media"><div class="gs-badge"><span class="gs-pct">0%</span></div></div><div class="gs-foot"><span class="gs-label">${esc(d.label)}</span><span class="gs-t"></span></div><div class="gs-bar"><div class="gs-fill"></div></div></div>`);
         progRows[d.label]=row;chat.appendChild(row);scrollDown();
       }
       const pct=d.pct??Math.min(95,8+d.elapsed*1.7);
-      row.querySelector(".p-t").textContent=`${Math.round(pct)}% · ${d.elapsed}s`;
-      row.querySelector(".p-fill").style.width=pct+"%";
+      row.querySelector(".gs-pct").textContent=`${Math.round(pct)}%`;
+      row.querySelector(".gs-t").textContent=`${d.elapsed}s`;
+      row.querySelector(".gs-fill").style.width=pct+"%";
     }
     else if(ev==="confirm"){hideTyping();flushBot();renderConfirm(d);
       tg?.HapticFeedback?.notificationOccurred("warning");}
