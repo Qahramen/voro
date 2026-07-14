@@ -16,6 +16,7 @@
      har panel ustki qirradan yoritiladi; hamma narsa suzadi.
      ================================================================ */
   :root{
+    --padb:10px;   /* pastki bo'shliq (embed'da sayt dock'i uchun; JS o'rnatadi) */
     --bg:#070809;
     --text:#F4F7FC; --dim:rgba(220,230,248,.62);
     --cyan:#2BD4FF; --mint:#4AE3B5; --violet:#9D8CFF; --red:#FF7A8A;
@@ -117,7 +118,7 @@
 
   /* ---------- CHAT ---------- */
   #chat{flex:1 1 auto;min-height:0;overflow-y:auto;z-index:2;position:relative;
-        padding:10px max(14px,calc((100% - 760px)/2)) 8px;
+        padding:10px max(14px,calc((100% - 760px)/2)) calc(var(--padb) + 104px);
         display:flex;flex-direction:column;gap:10px;
         -webkit-overflow-scrolling:touch;}
   .msg{max-width:85%;padding:11px 15px;border-radius:20px;
@@ -257,7 +258,10 @@
     animation:appear .4s var(--spring);}
 
   /* ---------- BIRIKTIRMALAR ---------- */
-  #attbar{display:none;gap:9px;padding:6px 16px 0;flex-wrap:wrap;z-index:3;}
+  #attbar{display:none;gap:9px;flex-wrap:wrap;z-index:29;
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(var(--padb) + env(safe-area-inset-bottom) + 86px);
+    width:min(calc(100% - 24px),760px);padding:0 8px;}
   #attbar.show{display:flex;}
   .att-chip{position:relative;width:58px;height:58px;border-radius:16px;overflow:hidden;
     border:1px solid var(--glass-border);
@@ -271,9 +275,10 @@
 
   /* ---------- SUZUVCHI KIRITISH PANELI ---------- */
   footer{
-    flex:0 0 auto;z-index:20;
+    position:fixed;z-index:30;
+    left:50%;transform:translateX(-50%);
+    bottom:calc(var(--padb) + env(safe-area-inset-bottom));
     width:min(calc(100% - 24px),760px);
-    margin:6px auto calc(10px + env(safe-area-inset-bottom));
     padding:8px;border-radius:calc(var(--r) + 4px);
     display:flex;gap:8px;align-items:flex-end;
   }
@@ -431,7 +436,9 @@ const AUTH = { uid: qp.get("uid")||"", exp: qp.get("exp")||"", sig: qp.get("sig"
 const EMBED = qp.get("embed")==="1";
 if(EMBED) document.documentElement.classList.add("embed");
 // padb: sayt pastki dock'i ustidan composer'ni surish uchun (parent'dan keladi)
-function applyPadb(v){ v=parseInt(v,10)||0; document.body.style.paddingBottom=v>0?(v+"px"):""; }
+function applyPadb(v){ v=parseInt(v,10)||0;
+  document.documentElement.style.setProperty("--padb",(v>0?v:10)+"px");
+  document.body.style.paddingBottom=""; }
 if(EMBED) applyPadb(qp.get("padb"));
 window.addEventListener("message",function(e){
   if(e&&e.data&&e.data.t==="vgpadb") applyPadb(e.data.v);
