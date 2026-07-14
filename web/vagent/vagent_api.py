@@ -453,6 +453,7 @@ class Session:
         self.lang: str = "uz"
         self.pending_quote: Optional[dict] = None
         self.confirmed_token: Optional[str] = None
+        self.run_confirmed: bool = False   # tasdiqdan keyin generatsiyani DETERMINISTIK boshlash
         self.last_jobs: list[dict] = []
         self.active_jobs = 0
         self.updated = time.time()
@@ -526,12 +527,23 @@ TOOLS = [
          "required": ["kind", "model", "label"]}}}, "required": ["jobs"]}},
 
     {"name": "request_confirmation",
-     "description": "Tangacha sarfini tasdiqlash kartasi. Generatsiyadan oldin MAJBURIY. Chaqirilgach javobni yakunlang — foydalanuvchi tugma bosishini kutamiz.",
+     "description": "Tangacha sarfini tasdiqlash kartasi. Generatsiyadan oldin MAJBURIY. Chaqirilgach javobni yakunlang — foydalanuvchi tugma bosishini kutamiz. Foydalanuvchi 'ha' tugmasini bossa, generatsiya AVTOMATIK boshlanadi — generate_batch'ni qayta chaqirishning HOJATI YO'Q.",
      "input_schema": {"type": "object", "properties": {
          "summary": {"type": "string"},
          "total": {"type": "integer"},
-         "jobs": {"type": "array", "items": {"type": "object"}}},
+         "jobs": {"type": "array", "items": JOB_ITEM_SCHEMA},
+         "is_iteration": {"type": "boolean", "description": "Oldingi natijaning remiksi/tuzatishi bo'lsa true — 50% chegirma."}},
          "required": ["summary", "total", "jobs"]}},
+
+    {"name": "present_options",
+     "description": "Foydalanuvchiga TANLOV variantlarini BOSILADIGAN TUGMALAR ko'rinishida beradi. Foydalanuvchidan bir nechta aniq variant orasidan tanlashni so'ramoqchi bo'lsang (model tanlash, format/nisbat, davomiylik, uslub, kadr soni, 'qaysi biri yoqdi' va h.k.) — matnda ro'yxat yozma, SHU tool'ni chaqir. Foydalanuvchi tugmani bosadi, tanlovi xabar sifatida qaytadi. Chaqirilgach javobni YAKUNLA.",
+     "input_schema": {"type": "object", "properties": {
+         "prompt": {"type": "string", "description": "Qisqa savol/izoh (foydalanuvchi tilida)."},
+         "options": {"type": "array", "items": {"type": "object", "properties": {
+             "label": {"type": "string", "description": "Tugmadagi qisqa matn (foydalanuvchi tilida)."},
+             "value": {"type": "string", "description": "Bosilganda yuboriladigan to'liq matn (bo'sh bo'lsa label ishlatiladi)."}},
+             "required": ["label"]}}},
+         "required": ["prompt", "options"]}},
 
     {"name": "generate_batch",
      "description": "1 yoki bir nechta ishni PARALLEL generatsiya qiladi. FAQAT tasdiqdan keyin. Ko'p-kadrli rejalarda hammasini bitta chaqiruvda bering — bir vaqtda ishlaydi.",
@@ -595,7 +607,8 @@ Psixologik profilni remember_fact bilan saqla: tajriba darajasi, muloqot uslubi,
 Ishonch — eng qimmat aktiv. TAQIQLANADI: soxta shoshiltirish ("faqat bugun!"), bosim o'tkazish, aybdorlik hissini uyg'otish, yashirin xarajat. "Keyinroq" degan odamga bosim qilma — xushmuomala yakunla, u qaytadi. Sotish emas, YORDAM ber — sotuv o'zi keladi.
 
 # QOIDALAR (buzilmas)
-1. TANGACHA MUQADDAS: estimate_cost → request_confirmation → foydalanuvchi "ha" → generate_batch. request_confirmation'dan keyin javobni YAKUNLA.
+1. TANGACHA MUQADDAS: estimate_cost → request_confirmation → foydalanuvchi "ha" tugmasini bosadi → generatsiya AVTOMATIK boshlanadi. request_confirmation'ga jobs'larni TO'LIQ generatsiyaga tayyor holda ber (kind, model, professional inglizcha prompt, label, kerak bo'lsa reference_urls/aspect_ratio/duration). request_confirmation'dan keyin javobni YAKUNLA — generate_batch'ni O'ZING QAYTA CHAQIRMA, tizim tasdiqdan keyin pending jobs'ni o'zi ishga tushiradi.
+1b. TUGMALI TANLOV: foydalanuvchidan bir nechta aniq variant orasidan tanlashni so'ramoqchi bo'lsang (masalan "video 16:9 yoki 9:16?", "qaysi model?", "5s yoki 10s?", "qaysi natija yoqdi?") — matnda "1) ... 2) ..." deb yozma, MAJBURIY present_options tool'ini chaqir: har variant bosiladigan tugma bo'ladi. Faqat erkin matn kerak bo'lganda (masalan g'oyani so'rashda) tugma ishlatma.
 2. Balans yetmasa — arzonroq variant taklif qil (kichik model, past resolution, qisqa duration).
 3. Generatsiya promptlari professional INGLIZ tilida; foydalanuvchiga javob va tushuntirish esa {lang_name}.
 4. Seedance filtri: shubhali so'zlarni neytral sinonimlarga almashtir ("fight" → "dynamic action choreography"). Bola, mashhur shaxs, brend logotipi bilan xavfli so'rovlarni rad et.
@@ -702,13 +715,27 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
 
     if name == "request_confirmation":
         token = uuid.uuid4().hex[:12]
-        sess.pending_quote = {"token": token, "total": int(inp["total"]), "jobs": inp["jobs"]}
+        sess.pending_quote = {"token": token, "total": int(inp["total"]),
+                              "jobs": inp["jobs"],
+                              "is_iteration": bool(inp.get("is_iteration", False))}
         sess.confirmed_token = None
         track(uid, "quote_shown", {"total": int(inp["total"])})
         await emit("confirm", {"token": token, "summary": inp["summary"],
                                "total": int(inp["total"]), "jobs": inp["jobs"],
                                "balance": get_balance(uid)})
         return {"status": "waiting_user", "token": token}
+
+    if name == "present_options":
+        opts = []
+        for o in (inp.get("options") or [])[:8]:
+            lbl = str(o.get("label", "")).strip()
+            if not lbl:
+                continue
+            opts.append({"label": lbl, "value": str(o.get("value") or lbl).strip()})
+        if not opts:
+            return {"error": "options bo'sh."}
+        await emit("options", {"prompt": inp.get("prompt", ""), "options": opts})
+        return {"status": "waiting_user", "shown": [o["label"] for o in opts]}
 
     if name == "generate_batch":
         q = sess.pending_quote
@@ -884,6 +911,80 @@ async def claude_stream_turn(sess: Session, emit) -> None:
 
     await emit("error", {"text": "Juda ko'p qadam — so'rovni soddalashtiring."})
 
+
+# ============================================================
+# TASDIQDAN KEYINGI DETERMINISTIK GENERATSIYA
+#   Foydalanuvchi "Ha" tugmasini bosgach, generatsiya modelning qayta
+#   chaqiruviga bog'liq bo'lmasin — pending jobs to'g'ridan ishga tushadi.
+# ============================================================
+_GEN_DONE = {
+    "uz": "✅ Tayyor! {ok}/{n} ish bajarildi. Yana o'zgartiramizmi yoki yangi ish boshlaymizmi?",
+    "ru": "✅ Готово! Выполнено {ok}/{n}. Изменим или начнём новую работу?",
+    "en": "✅ Done! {ok}/{n} completed. Tweak it or start a new job?",
+}
+_GEN_NOQUOTE = {
+    "uz": "Tasdiqlanadigan ish topilmadi — g'oyani qaytadan yozing.",
+    "ru": "Нет задачи для подтверждения — опишите идею заново.",
+    "en": "No pending job — please describe your idea again.",
+}
+_GEN_ALLFAIL = {
+    "uz": "Afsus, generatsiya bajarilmadi — sarflangan tangachalar qaytarildi. Qayta urinamizmi?",
+    "ru": "Увы, генерация не удалась — потраченные монеты возвращены. Попробуем снова?",
+    "en": "Sorry, generation failed — your coins were refunded. Try again?",
+}
+_GEN_RETRY_OPTS = {
+    "uz": [{"label": "🔁 Qayta urinish", "value": "Xuddi shu ishni qayta urinib ko'r"},
+           {"label": "✨ Boshqa g'oya", "value": "Boshqa narsa qilaylik"}],
+    "ru": [{"label": "🔁 Повторить", "value": "Попробуй ту же задачу ещё раз"},
+           {"label": "✨ Другая идея", "value": "Давай сделаем другое"}],
+    "en": [{"label": "🔁 Retry", "value": "Try the same job again"},
+           {"label": "✨ Another idea", "value": "Let's do something else"}],
+}
+_GEN_OPTS = {
+    "uz": [{"label": "🔁 Qayta ishlash (−50%)", "value": "Shu natijani biroz o'zgartirib qayta ishla"},
+           {"label": "✨ Yangi ish", "value": "Yangi ish boshlaymiz"}],
+    "ru": [{"label": "🔁 Доработать (−50%)", "value": "Немного изменить и переделать этот результат"},
+           {"label": "✨ Новая работа", "value": "Начнём новую работу"}],
+    "en": [{"label": "🔁 Refine (−50%)", "value": "Refine and redo this result a bit"},
+           {"label": "✨ New job", "value": "Let's start a new job"}],
+}
+
+
+async def run_confirmed_generation(sess: "Session", emit):
+    lang = getattr(sess, "lang", "uz")
+    if lang not in ("uz", "ru", "en"):
+        lang = "uz"
+    q = sess.pending_quote
+    if not q or not q.get("jobs"):
+        await emit("error", {"text": _GEN_NOQUOTE[lang]})
+        sess.pending_quote = None
+        sess.confirmed_token = None
+        return
+    out = await run_tool("generate_batch",
+                         {"jobs": q["jobs"], "is_iteration": bool(q.get("is_iteration"))},
+                         sess, emit)
+    if out.get("error"):
+        await emit("error", {"text": out["error"]})
+        return
+    results = out.get("results") or []
+    ok = sum(1 for r in results if r.get("status") == "ok")
+    # Suhbat izchilligi: keyingi savollar uchun kontekst yozuvi
+    note = json.dumps({"generated": results}, ensure_ascii=False)[:1500]
+    sess.messages.append({"role": "assistant", "content": [
+        {"type": "text", "text": f"[generatsiya bajarildi: {ok}/{len(results)} ok] {note}"}]})
+    # Har MUVAFFAQIYATSIZ ish uchun sababni OCHIQ ko'rsat (avval yashirilardi)
+    for r in results:
+        if r.get("status") != "ok":
+            await emit("error", {"text": f"⚠️ {r.get('label', 'Ish')}: "
+                                         f"{r.get('error') or 'nomaʼlum xato'}"})
+    if ok:
+        await emit("text", {"delta": _GEN_DONE[lang].format(ok=ok, n=len(results))})
+        await emit("options", {"prompt": "", "options": _GEN_OPTS[lang]})
+    else:
+        await emit("text", {"delta": _GEN_ALLFAIL[lang]})
+        await emit("options", {"prompt": "", "options": _GEN_RETRY_OPTS[lang]})
+
+
 # ============================================================
 # API ENDPOINTLAR
 # ============================================================
@@ -932,6 +1033,7 @@ async def vagent_chat(body: ChatIn):
     if body.confirm_token and sess.pending_quote and \
             body.confirm_token == sess.pending_quote["token"]:
         sess.confirmed_token = body.confirm_token
+        sess.run_confirmed = True   # worker LLM'ni emas, generatsiyani ishga tushiradi
         track(body.uid, "confirmed", {"total": sess.pending_quote["total"]})
         user_text = "✅ Ha, roziman, boshla!"
     elif body.decline:
@@ -971,7 +1073,11 @@ async def vagent_chat(body: ChatIn):
 
     async def worker():
         try:
-            await claude_stream_turn(sess, emit)
+            if sess.run_confirmed:
+                sess.run_confirmed = False
+                await run_confirmed_generation(sess, emit)
+            else:
+                await claude_stream_turn(sess, emit)
         except Exception as e:
             await emit("error", {"text": f"Ichki xato: {e}"})
         finally:

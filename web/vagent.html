@@ -293,6 +293,38 @@
     .blob,.ava .robot,.robot-big,.p-fill::after,.confirm-card::before,.icon-btn.rec
     {animation:none !important;}
   }
+
+  /* voro.uz bosh sahifaga qaytish tugmasi (Vagent — saytning bir qismi) */
+  .hd-home{display:flex;align-items:center;gap:5px;flex:none;
+    padding:7px 12px 7px 8px;border-radius:var(--r-pill);cursor:pointer;
+    color:var(--text);font-weight:600;font-size:13px;line-height:1;
+    background:var(--glass-strong);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    border:1px solid var(--glass-border);
+    box-shadow:inset 0 1px 0 var(--glass-top);
+    transition:transform .14s var(--spring);}
+  .hd-home:active{transform:scale(.93);}
+  .hd-home .ic{width:17px;height:17px;color:var(--cyan);vertical-align:0;}
+  .hd-home span{white-space:nowrap;letter-spacing:-.01em;}
+  @media(max-width:359px){.hd-home span{display:none;} .hd-home{padding:8px;}}
+
+  /* Tugmali tanlov (present_options) */
+  .opts{margin:8px 0 4px;display:flex;flex-direction:column;gap:9px;
+    align-items:flex-start;max-width:90%;animation:appear .35s var(--spring) both;}
+  .opts-q{font-size:14.5px;color:var(--text);line-height:1.45;}
+  .opts-row{display:flex;flex-wrap:wrap;gap:8px;}
+  .opt-btn{padding:11px 16px;border-radius:14px;cursor:pointer;
+    font-size:14px;font-weight:600;color:var(--text);
+    background:linear-gradient(155deg,rgba(111,211,255,.22),rgba(61,123,255,.14));
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    border:1px solid var(--glass-border);
+    box-shadow:inset 0 1px 0 var(--glass-top);
+    transition:transform .12s var(--spring),opacity .2s;}
+  .opt-btn:active{transform:scale(.95);}
+  .opt-btn:disabled{cursor:default;}
+  .opt-btn.dim{opacity:.38;}
+  .opt-btn.picked{color:#062018;border-color:transparent;
+    background:linear-gradient(160deg,#9CF4D4,#3ADFA8 60%,#22C593);}
 </style>
 </head>
 <body>
@@ -300,6 +332,10 @@
 <div class="blobs"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
 
 <header class="glass">
+  <button class="hd-home" id="hdHome" title="voro.uz">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg>
+    <span>voro.uz</span>
+  </button>
   <div class="ava" id="ava"><div class="robot" data-robot></div></div>
   <div class="hinfo">
     <h1>Vagent</h1>
@@ -382,6 +418,24 @@ function applyLang(){ try{
 }catch(e){} }
 applyLang();
 const authQS = `uid=${AUTH.uid}&exp=${AUTH.exp}&sig=${AUTH.sig}`;
+
+// ===== VORO.UZ BOSH SAHIFAGA QAYTISH (Vagent — saytning bir qismi) =====
+const HOME_URL = "https://voro.uz/";
+const inTelegram = !!(window.Telegram?.WebApp?.initData);
+(function(){
+  var hb=document.getElementById("hdHome");
+  if(hb) hb.onclick=function(){
+    tg?.HapticFeedback?.impactOccurred("light");
+    if(inTelegram){ try{ tg.close(); return; }catch(e){} }
+    location.href=HOME_URL;
+  };
+  try{
+    if(inTelegram && tg?.BackButton){
+      tg.BackButton.show();
+      tg.BackButton.onClick(function(){ try{ tg.close(); }catch(e){ location.href=HOME_URL; } });
+    }
+  }catch(e){}
+})();
 
 const ROBOT_SVG = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 400 500" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
   <defs>
@@ -729,9 +783,30 @@ async function stream(payload){
       tg?.HapticFeedback?.notificationOccurred("success");
     }
     else if(ev==="balance"){setBal(d.balance);}
+    else if(ev==="options"){botMsg=null;botBuf="";renderOptions(d);}
     else if(ev==="error"){botMsg=null;botBuf="";
       chat.appendChild(el(`<div class="err">${esc(d.text)}</div>`));scrollDown();}
   }
+}
+
+// ===== TUGMALI TANLOV (present_options) =====
+function renderOptions(d){
+  const wrap=el(`<div class="opts"></div>`);
+  if(d.prompt) wrap.appendChild(el(`<div class="opts-q">${md(d.prompt)}</div>`));
+  const row=el(`<div class="opts-row"></div>`);
+  (d.options||[]).forEach(o=>{
+    const b=el(`<button class="opt-btn">${esc(o.label)}</button>`);
+    b.onclick=()=>{
+      if(busy)return;
+      row.querySelectorAll(".opt-btn").forEach(x=>{x.disabled=true;x.classList.add("dim");});
+      b.classList.remove("dim");b.classList.add("picked");
+      tg?.HapticFeedback?.impactOccurred("medium");
+      sendMsg({text:(o.value||o.label)});
+    };
+    row.appendChild(b);
+  });
+  wrap.appendChild(row);
+  chat.appendChild(wrap);scrollDown();
 }
 
 // ===== TASDIQ KARTASI =====
