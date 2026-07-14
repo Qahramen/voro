@@ -1,0 +1,23 @@
+{
+  "_izoh": "Bu faylni tahrirlash uchun deploy KERAK EMAS — Vagent har so'rovda yangilanishni o'zi ko'radi. Yangi model qo'shish: pricing + hints ga yozish kifoya.",
+
+  "pricing": {
+    "image": {
+      "nano-banana-2":  {"base": 2},
+      "gpt-image-2":    {"base": 5}
+    },
+    "video": {
+      "seedance-2.0": {"base_per_sec": 4, "res_mult": {"480p": 1.0, "720p": 1.5, "1080p": 2.5}},
+      "kling-3.0":    {"base_per_sec": 6, "res_mult": {"720p": 1.0, "1080p": 1.8}},
+      "veo-3.1":      {"base_per_sec": 8, "res_mult": {"720p": 1.0, "1080p": 1.6}}
+    }
+  },
+
+  "hints": {
+    "nano-banana-2": "Tez va arzon rasm. Sketch, qoralama, g'oya sinovi.",
+    "gpt-image-2": "Yuqori sifat, matn/logo aniq. Poster, reklama, taklifnoma.",
+    "seedance-2.0": "Eng kuchli video. Multi-referens (@image1 @video1 @audio1), motion transfer.",
+    "kling-3.0": "Silliq harakat, realistik odamlar.",
+    "veo-3.1": "Kinematik sifat, audio bilan."
+  }
+}

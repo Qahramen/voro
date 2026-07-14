@@ -1,0 +1,217 @@
+[
+  {
+    "name": "Motion transfer (harakat ko'chirish)",
+    "tags": [
+      "motion",
+      "transfer",
+      "harakat",
+      "raqs",
+      "dance",
+      "seedance",
+      "video1",
+      "trend"
+    ],
+    "recipe": "Seedance 2.0. @video1 = FAQAT harakat manbai, @image1 = qiyofa/uslub manbai. Prompt qolipi: 'The person from @image1 performs the exact motion and choreography from @video1. Preserve the identity, face, clothing and body proportions of @image1 completely. Only the movement timing and body dynamics come from @video1.' NEGATIVE prompt MAJBURIY: 'face from video1, clothing from video1, background from video1, identity blending, visual style transfer from video1'. Aspect 9:16, 720p yetarli (trend kontent uchun)."
+  },
+  {
+    "name": "Mahsulot reklamasi (MURODOV uslubi)",
+    "tags": [
+      "reklama",
+      "mahsulot",
+      "product",
+      "ad",
+      "sut",
+      "biznes",
+      "brend",
+      "commercial"
+    ],
+    "recipe": "GPT Image 2 (matn/logotip aniq chiqadi) yoki Seedance video. @image1 = mahsulot foto. Qolip: 'Cinematic commercial product shot of @image1, premium studio lighting, shallow depth of field, [mahsulot muhiti: fresh morning kitchen / rustic farm table], appetizing, ultra-detailed, brand packaging text preserved exactly as in @image1, advertising photography style'. Video uchun: sekin kamera harakati qo'sh — 'slow dolly-in camera movement, product hero shot'. NEGATIVE: 'distorted text, altered logo, extra products'."
+  },
+  {
+    "name": "Futbol fotosessiya (FIFA 2026)",
+    "tags": [
+      "futbol",
+      "football",
+      "fifa",
+      "fotosessiya",
+      "jersey",
+      "sport",
+      "selfie",
+      "ozbekiston"
+    ],
+    "recipe": "Nano Banana 2 yoki GPT Image 2. @image1 = foydalanuvchi selfisi. Qolip: 'The person from @image1 as a professional football player, wearing Uzbekistan national team jersey, FIFA World Cup 2026 stadium atmosphere, dramatic stadium floodlights, confident pose, photorealistic sports photography, preserve exact facial identity from @image1'. Yuz o'xshashligi muhim — NEGATIVE: 'different face, changed facial features, cartoon style'. 9:16 (Instagram uchun) yoki 1:1."
+  },
+  {
+    "name": "To'y / tabrik video",
+    "tags": [
+      "toy",
+      "wedding",
+      "tabrik",
+      "tugilgan",
+      "kun",
+      "bayram",
+      "romantic",
+      "cinematic"
+    ],
+    "recipe": "Seedance 2.0 yoki Kling 3.0 (silliq odam harakati). Qolip: 'Cinematic celebration scene, [voqea: elegant wedding hall / birthday celebration], warm golden hour lighting, soft bokeh, floating flower petals / confetti, slow motion, emotional heartfelt atmosphere, 4K wedding videography style'. @image1 bo'lsa: 'featuring the person from @image1, preserve identity'. Audio yuklangan bo'lsa audio-lock: 'use @audio1 exactly as provided, do not regenerate or modify the audio track'."
+  },
+  {
+    "name": "Filtrdan qochish lug'ati (Seedance)",
+    "tags": [
+      "filter",
+      "flag",
+      "rad",
+      "blok",
+      "content",
+      "xato",
+      "moderation"
+    ],
+    "recipe": "Seedance rad etsa, so'zlarni almashtir: 'fight/jang' -> 'dynamic action choreography'; 'gun/qurol' -> 'futuristic prop device'; 'blood' -> 'dramatic red lighting effects'; 'kiss' -> 'tender close embrace'; 'sexy' -> 'elegant confident'; brend nomlari -> 'premium brand style'. Mashhur shaxs nomini HECH QACHON yozma -> 'a charismatic performer resembling the reference @image1'. Bola ishtirokidagi shubhali so'rov -> RAD ET."
+  },
+  {
+    "name": "Ko'p kadrli storiya / serial",
+    "tags": [
+      "storiya",
+      "storyboard",
+      "serial",
+      "instagram",
+      "kadr",
+      "epizod",
+      "3",
+      "qism"
+    ],
+    "recipe": "Ketma-ketlik: (1) har kadr uchun nano-banana qoralama (2 tangacha) -> foydalanuvchi tasdiqlaydi -> (2) tasdiqlangan kadrlar Seedance video bo'ladi. Qahramon bir xilligi uchun har kadr promptida BIR XIL personaj tavsifi so'zma-so'z takrorlansin + @image1 referens. Qolip boshi: 'Episode [N] of [seriya]: [shot description]. Same character as @image1: [qisqa lock tavsif]. Consistent visual style: [uslub lock].'"
+  },
+  {
+    "name": "Gapiruvchi avatar / ovozli tabrik (InfiniteTalk)",
+    "tags": [
+      "gapiruvchi",
+      "avatar",
+      "ovoz",
+      "talking",
+      "tabrik",
+      "nutq",
+      "lip",
+      "sync"
+    ],
+    "recipe": "InfiniteTalk yoki Seedance audio-sync. @image1 = odam portreti, @audio1 = nutq yozuvi. Qolip: 'The person from @image1 speaking naturally to camera, accurate lip-sync to @audio1, warm eye contact, subtle head movements and hand gestures, professional interview lighting, static camera'. NEGATIVE: 'audio regeneration, changed voice, robotic movement, morphing face'. Audio-lock MAJBURIY: 'use @audio1 exactly as provided'."
+  },
+  {
+    "name": "Logotip jonlantirish (brend intro)",
+    "tags": [
+      "logo",
+      "logotip",
+      "intro",
+      "brend",
+      "animatsiya",
+      "reveal",
+      "kanal"
+    ],
+    "recipe": "Seedance 2.0, 5s, 1080p tavsiya. @image1 = logotip (toza fonda). Qolip: 'Cinematic logo reveal of @image1: particles of light assemble into the logo, elegant slow motion, dark premium background with subtle depth, soft lens flare at the final frame, the logo stays perfectly sharp and unchanged'. NEGATIVE: 'distorted logo, changed colors, extra text, morphing shapes'."
+  },
+  {
+    "name": "Do'kon / restoran / obyekt turi",
+    "tags": [
+      "dokon",
+      "restoran",
+      "tur",
+      "obyekt",
+      "biznes",
+      "interior",
+      "makon",
+      "kafe"
+    ],
+    "recipe": "Seedance yoki Veo 3.1. @image1..@image3 = joy suratlari. Qolip: 'Smooth cinematic walkthrough tour based on @image1 @image2 @image3, gliding steadicam movement, warm inviting atmosphere, golden hour light through windows, appetizing/premium details in focus'. Oxiriga brend kadri: 'ending on a clean frame with space for logo overlay'. 9:16 (Instagram) yoki 16:9 (sayt)."
+  },
+  {
+    "name": "Avto sotuv e'loni",
+    "tags": [
+      "avto",
+      "mashina",
+      "moshina",
+      "sotuv",
+      "elon",
+      "car",
+      "avtosalon"
+    ],
+    "recipe": "GPT Image 2 (rasm) yoki Seedance (video). @image1 = mashina foto. Qolip: 'Professional automotive advertisement of the exact car from @image1, dramatic studio lighting or sunset highway location, glossy reflections, low angle hero shot, preserve exact car model, color and plate area'. Video: 'slow orbit camera around the car'. NEGATIVE: 'different car model, changed color, warped wheels, altered badges'."
+  },
+  {
+    "name": "Ustoz / kurs / ekspert promo",
+    "tags": [
+      "kurs",
+      "ustoz",
+      "ekspert",
+      "promo",
+      "talim",
+      "oquv",
+      "trening",
+      "marketing"
+    ],
+    "recipe": "Kling 3.0 (realistik odam) yoki InfiniteTalk (gapirsa). @image1 = ekspert portreti. Qolip: 'Confident professional from @image1 in a modern minimalist office, teaching gesture toward floating holographic UI elements (charts, checkmarks), cinematic corporate style, shallow depth of field'. Matn overlay joyi: 'clean negative space on the upper third for text'."
+  },
+  {
+    "name": "Ko'chmas mulk e'loni",
+    "tags": [
+      "uy",
+      "kvartira",
+      "kochmas",
+      "mulk",
+      "rieltor",
+      "sotiladi",
+      "ijara"
+    ],
+    "recipe": "@image1..@image4 = xonalar suratlari. Qolip: 'Elegant real-estate showcase video from @image1 @image2 @image3 @image4, smooth transitions between rooms, bright natural daylight, wide-angle lens feel, spotless premium presentation'. Har kadr 1.5-2s. Oxiri: 'final frame with soft blur for price text overlay'."
+  },
+  {
+    "name": "Milliy bayram tabrigi (Navro'z/Ramazon/Mustaqillik)",
+    "tags": [
+      "navroz",
+      "ramazon",
+      "hayit",
+      "mustaqillik",
+      "bayram",
+      "milliy",
+      "tabrik"
+    ],
+    "recipe": "Seedance 2.0. Qolip: 'Heartwarming Uzbek national celebration scene: [bayram: Navruz sumalak gathering / Eid family table / Independence day flags], traditional atlas and adras patterns, warm communal atmosphere, cinematic golden light, authentic Central Asian architecture details'. @image1 bo'lsa odam qo'shiladi. Diniy bayramlarda ehtirom: ichkilik/raqs elementlari QO'SHILMASIN."
+  },
+  {
+    "name": "Bolalar multfilm kadri (PIPI uslubi)",
+    "tags": [
+      "bola",
+      "multfilm",
+      "cartoon",
+      "pipi",
+      "animatsiya",
+      "kids",
+      "personaj"
+    ],
+    "recipe": "Qahramon LOCK — har kadrda so'zma-so'z bir xil tavsif + @image1 referens. Qolip: 'Charming 3D animated children cartoon style, [PERSONAJ LOCK: exact same character as @image1 — colors, proportions, outfit], expressive big eyes, bright saturated colors, soft rounded shapes, Pixar-like lighting, kid-friendly wholesome scene'. NEGATIVE: 'realistic style, scary elements, changed character design'."
+  },
+  {
+    "name": "Trend audio ostiga video (Reels/TikTok)",
+    "tags": [
+      "trend",
+      "reels",
+      "tiktok",
+      "audio",
+      "viral",
+      "muzika",
+      "beat"
+    ],
+    "recipe": "Muhim: video beat'ga tushishi kerak. Qolip: 'Fast-paced dynamic edit synchronized to music beats: [3-4 ta qisqa sahna tavsifi], quick whip transitions on each beat, high energy, punchy colors, 9:16'. Duration = audio uzunligiga teng (8-12s optimal). Trend audioni @audio1 qilib berma — mualliflik muammosi; bot'da faqat vizual qilinadi, audio Reels'da qo'shiladi."
+  },
+  {
+    "name": "Mahsulot unboxing / ASMR",
+    "tags": [
+      "unboxing",
+      "asmr",
+      "mahsulot",
+      "ochish",
+      "packaging",
+      "korish"
+    ],
+    "recipe": "Seedance 2.0. @image1 = mahsulot. Qolip: 'Satisfying close-up unboxing of @image1, elegant hands slowly opening premium packaging, macro details of texture, soft studio light, shallow focus, ASMR aesthetic, product label perfectly readable'. NEGATIVE: 'distorted text, extra fingers, changed packaging design'."
+  }
+]

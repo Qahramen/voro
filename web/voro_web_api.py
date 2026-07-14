@@ -867,6 +867,15 @@ app.mount("/media", StaticFiles(directory=str(MEDIA_DIR), check_dir=False), name
 
 
 # ────────────────────────── AUTH ──
+# ── Vagent AI yordamchi (izolyatsiya: import xato bo'lsa web ishlashda davom etadi) ──
+try:
+    from vagent_api import vagent_router
+    app.include_router(vagent_router)
+    print("[vagent] router ulandi: /vagent")
+except Exception as _ve:
+    print("[vagent] router yuklanmadi:", _ve)
+
+
 @app.post("/auth/register")
 async def register(request: Request):
     b = await request.json()
