@@ -21557,6 +21557,7 @@ def lang_keyboard():
 
 I18N = {
     "vagent_studio": {"uz": "✨ Vagent Studio (yangi)", "ru": "✨ Vagent Studio (новый)", "en": "✨ Vagent Studio (new)"},
+    "vagent_studio_intro": {"uz": "🤖 <b>Vagent Studio</b> — yangi AI ijodiy yordamchingiz!\n\nGapirib yoki yozib g'oya bering — reja tuzadi, narxini aytadi, siz tasdiqlasangiz rasm/video yaratadi. Rasmingizni yuborsangiz, sizni videoga qo'shadi.\n\n👇 Ochish uchun tugmani bosing:\n\n", "ru": "🤖 <b>Vagent Studio</b> — ваш новый AI-помощник!\n\nСкажите или напишите идею — составит план, назовёт цену, после подтверждения создаст фото/видео. Пришлёте фото — добавит вас в видео.\n\n👇 Нажмите кнопку, чтобы открыть:\n\n", "en": "🤖 <b>Vagent Studio</b> — your new AI creative assistant!\n\nSpeak or type your idea — it plans, prices, and after your confirmation creates photo/video. Send your photo and it puts you in the video.\n\n👇 Tap the button to open:\n\n"},
     "back": {"uz": "◀️ Orqaga", "ru": "◀️ Назад", "en": "◀️ Back"},
     "home": {"uz": "🏠 Bosh sahifa", "ru": "🏠 Главная", "en": "🏠 Home"},
     "create_video": {"uz": "🎬 Video yaratish", "ru": "🎬 Создать видео", "en": "🎬 Create video"},
@@ -23581,7 +23582,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _vg_kb = InlineKeyboardMarkup(_vg_rows)
         await q.answer()
         await q.message.reply_text(
-            T("mp6") + f"⚡️ {T('vg_balance')}: <b>{bal}⚡️</b>  ·  {T('vg_perreq')}: {VAGENT_LLM_COST}⚡️",
+            T("vagent_studio_intro", q.from_user.id) + f"⚡️ {T('vg_balance', q.from_user.id)}: <b>{bal}⚡️</b>",
             parse_mode="HTML",
             reply_markup=_vg_kb
         )
