@@ -59,6 +59,7 @@ DATA_DIR = os.environ.get("VORO_DATA_DIR", "/opt/voro")
 USERS_JSON = os.environ.get("VORO_USERS_JSON", "/root/bot/users.json")   # INTEGRATSIYA: bot balans fayli
 MEMORY_JSON = os.path.join(DATA_DIR, "vagent_memory.json")
 INBOX_JSON = os.path.join(DATA_DIR, "vagent_inbox.json")     # crash-recovery natijalari
+CHATS_JSON = os.path.join(DATA_DIR, "vagent_chats.json")     # suhbatlar (mobil<->web sinxron)
 UPLOADS_DIR = os.path.join(DATA_DIR, "vagent_uploads")
 SKILLS_JSON = os.path.join(DATA_DIR, "vagent_skills.json")   # o'sib boruvchi retseptlar bazasi
 MODELS_JSON = os.path.join(DATA_DIR, "vagent_models.json")   # narx/model konfiguratsiyasi (hot-reload)
@@ -294,6 +295,29 @@ def inbox_push(user_id: str, item: dict) -> None:
 def inbox_pull(user_id: str, since_ts: int = 0) -> list:
     box = _locked_read(INBOX_JSON, {})
     return [i for i in box.get(str(user_id), []) if i["ts"] > since_ts]
+
+
+# ============================================================
+# SUHBATLAR — server tomonda saqlanadi (mobil va web bir xil bo'lishi uchun)
+# ============================================================
+
+def chats_read(user_id: str) -> list:
+    return _locked_read(CHATS_JSON, {}).get(str(user_id), [])
+
+def chats_write(user_id: str, chats: list) -> None:
+    def fn(box):
+        # eng ko'pi 30 suhbat, har birida eng ko'pi 120 yozuv (fayl shishmasin)
+        clean = []
+        for c in (chats or [])[:30]:
+            if not isinstance(c, dict):
+                continue
+            clean.append({"id": str(c.get("id", ""))[:40],
+                          "title": str(c.get("title", ""))[:80],
+                          "ts": int(c.get("ts", 0) or 0),
+                          "log": (c.get("log") or [])[-120:]})
+        box[str(user_id)] = clean
+        return True
+    _locked_update(CHATS_JSON, {}, fn)
 
 # ============================================================
 # HMAC AUTH
@@ -653,6 +677,10 @@ Ishonch — eng qimmat aktiv. TAQIQLANADI: soxta shoshiltirish ("faqat bugun!"),
 6. Narx/sifat balansi: oddiy ish uchun qimmat model taklif qilma, har doim arzon alternativani eslat.
 7. Katta g'oya → avval REJA (kadrlar + model + narx + jami), bitta tasdiq, keyin generate_batch bilan HAMMASI PARALLEL.
 8. Natijadan keyin qisqa tahlil + 50% chegirmali qayta-iteratsiya borligini eslat.
+8b. NATIJADAN KEYIN FOYDALANUVCHI GAPIRSA (o'zgartirish so'rasa, "o'xshamadi", "boshqacha", yoki yangi izoh): AVVAL nima demoqchi ekanini ANIQLA. Ikki xil bo'lishi mumkin:
+    (a) OXIRGI NATIJANI o'zgartirish (rang/matn/kadr) — o'sha rasmni referens qilib is_iteration=true bilan qayta yasash;
+    (b) YANGI g'oya yoki boshqa rasm bilan yangidan yasash.
+    Agar niyat ANIQ bo'lsa — darrov shunga qarab ish tut. Agar NOANIQ bo'lsa — TAXMIN QILMA, present_options bilan qisqa so'ra: masalan "Shu natijani o'zgartiramizmi, yoki yangidan yasaymizmi?". Foydalanuvchi rasm biriktirgan bo'lsa — o'sha rasmni referens sifatida ishlat.
 9. Bir vaqtda max {MAX_ACTIVE_JOBS_PER_USER} ish — katta rejalarni {MAX_ACTIVE_JOBS_PER_USER} talik guruhlarga bo'l.
 10. O'Z-O'ZINI TEKSHIRISH: yaratilgan RASM natijasi senga ko'rsatiladi — sinchiklab tekshir: so'ralgan narsa bormi, matn/logotip to'g'ri yozilganmi, anatomik yoki vizual nuqson yo'qmi. Jiddiy nuqson topsang — YASHIRMA: halol ayt, nima noto'g'riligini tushuntir va 50% chegirmali tuzatilgan qayta urinish taklif qil (promptni o'zing yaxshilab).
 11. QORALAMA→FINAL: 30+ tangachalik video buyurtmadan oldin 2 tangachalik nano-banana kadr-qoralama taklif qil: "avval kompozitsiyani arzon rasmda ko'rib olamiz, ma'qul bo'lsa videoga o'tamiz". Bu foydalanuvchi pulini himoya qiladi va ishonch quradi.
@@ -1314,6 +1342,30 @@ async def vagent_inbox(uid: str, exp: str, sig: str, since: int = 0):
     if not verify_auth(uid, exp, sig):
         return {"ok": False, "error": "auth"}
     return {"ok": True, "items": inbox_pull(uid, since)}
+
+
+class ChatsIn(BaseModel):
+    uid: str
+    exp: str
+    sig: str
+    chats: list = []
+
+
+@vagent_router.get("/chats")
+async def vagent_chats_get(uid: str, exp: str, sig: str):
+    """Suhbatlar ro'yxati — server tomonda (mobil va web bir xil ko'rsin)."""
+    if not verify_auth(uid, exp, sig):
+        return {"ok": False, "error": "auth"}
+    return {"ok": True, "chats": chats_read(uid)}
+
+
+@vagent_router.post("/chats")
+async def vagent_chats_post(body: ChatsIn):
+    """Suhbatlarni serverga saqlash (har o'zgarishda frontend yuboradi)."""
+    if not verify_auth(body.uid, body.exp, body.sig):
+        return {"ok": False, "error": "auth"}
+    chats_write(body.uid, body.chats)
+    return {"ok": True}
 
 
 @vagent_router.get("/health")

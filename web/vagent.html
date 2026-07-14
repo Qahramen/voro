@@ -17,6 +17,7 @@
      ================================================================ */
   :root{
     --padb:10px;   /* pastki bo'shliq (embed'da sayt dock'i uchun; JS o'rnatadi) */
+    --kb:0px;      /* klaviatura balandligi (JS visualViewport bilan o'rnatadi) */
     --bg:#070809;
     --text:#F4F7FC; --dim:rgba(220,230,248,.62);
     --cyan:#2BD4FF; --mint:#4AE3B5; --violet:#9D8CFF; --red:#FF7A8A;
@@ -120,7 +121,8 @@
 
   /* ---------- CHAT ---------- */
   #chat{flex:1 1 auto;min-height:0;overflow-y:auto;z-index:2;position:relative;
-        padding:10px max(14px,calc((100% - 760px)/2)) calc(var(--padb) + 104px);
+        overscroll-behavior:contain;   /* scroll orqa fonga o'tmasin */
+        padding:10px max(14px,calc((100% - 760px)/2)) calc(var(--padb) + var(--kb) + 104px);
         display:flex;flex-direction:column;gap:10px;
         -webkit-overflow-scrolling:touch;}
   /* MUHIM: chat bolalari HECH QACHON siqilmasin (uzun suhbatda karta/rasm
@@ -304,10 +306,11 @@
   footer{
     position:fixed;z-index:30;
     left:50%;transform:translateX(-50%);
-    bottom:calc(var(--padb) + env(safe-area-inset-bottom));
+    bottom:calc(var(--padb) + env(safe-area-inset-bottom) + var(--kb));
     width:min(calc(100% - 24px),760px);
     padding:8px;border-radius:calc(var(--r) + 4px);
     display:flex;flex-direction:column;gap:8px;
+    transition:bottom .18s ease;
   }
   .composer-row{display:flex;gap:8px;align-items:flex-end;}
   .icon-btn{width:44px;height:44px;flex:none;border-radius:16px;
@@ -813,7 +816,29 @@ function quick(b){inp.value=b.textContent;sendMsg();}
 const CHATS_KEY="vg_chats_"+AUTH.uid;
 function newId(){ return "c"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function loadChats(){ try{return JSON.parse(localStorage.getItem(CHATS_KEY)||"[]");}catch{return[];} }
-function saveChats(){ try{localStorage.setItem(CHATS_KEY,JSON.stringify(CHATS.slice(0,30)));}catch{} }
+let _srvTimer=null;
+function saveChats(){
+  try{localStorage.setItem(CHATS_KEY,JSON.stringify(CHATS.slice(0,30)));}catch{}
+  // serverga ham saqlaymiz (mobil va web bir xil bo'lsin) — debounce bilan
+  clearTimeout(_srvTimer);
+  _srvTimer=setTimeout(()=>{
+    fetch(`${API_BASE}/chats`,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({...AUTH,chats:CHATS})}).catch(()=>{});
+  },1200);
+}
+async function syncFromServer(){
+  try{
+    const r=await fetch(`${API_BASE}/chats?${authQS}`);
+    const d=await r.json();
+    if(d.ok && Array.isArray(d.chats)){
+      // server + local'ni id bo'yicha birlashtiramiz, yangi ts g'olib
+      const byId={};
+      [...CHATS, ...d.chats].forEach(c=>{ if(c&&c.id){ const e=byId[c.id]; if(!e||(c.ts||0)>(e.ts||0)) byId[c.id]=c; } });
+      CHATS=Object.values(byId).sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,30);
+      try{localStorage.setItem(CHATS_KEY,JSON.stringify(CHATS.slice(0,30)));}catch{}
+    }
+  }catch{}
+}
 let CHATS=loadChats();
 let CHAT_ID=(CHATS[0]&&CHATS[0].id)||newId();
 function activeChat(){
@@ -887,9 +912,13 @@ function closeHist(){ document.getElementById("histPanel")?.classList.remove("sh
 function toggleHist(){ const p=document.getElementById("histPanel"); if(p&&p.classList.contains("show")) closeHist(); else openHist(); }
 
 async function boot(){
-  // 1) SAQLANGAN SUHBATNI TIKLAYMIZ (refresh/navigatsiyada yo'qolmaydi)
+  // 0) SERVERDAN SUHBATLARNI OLAMIZ (mobil va web bir xil bo'lsin)
+  await syncFromServer();
+  if(CHATS.length && CHATS[0].log && CHATS[0].log.length){ CHAT_ID=CHATS[0].id; }
+  // 1) SAQLANGAN SUHBATNI TIKLAYMIZ (refresh/navigatsiya/boshqa qurilmada ham)
   const c=activeChat();
-  if(c.log.length){ clearChatUI(); renderLog(c.log); }
+  clearChatUI();
+  if(c.log.length){ renderLog(c.log); } else { showGreeting(); }
   try{
     const r=await fetch(`${API_BASE}/me?${authQS}`);const d=await r.json();
     setBal(d.ok?d.balance:"—");
@@ -911,6 +940,22 @@ async function boot(){
   }catch{}
 }
 boot();
+
+// ===== KLAVIATURA (iOS): composer klaviatura ustida qolsin =====
+(function(){
+  var vv=window.visualViewport; if(!vv) return;
+  var base=vv.height, last=0;
+  function onVV(){
+    if(vv.height>base) base=vv.height;         // eng katta = klaviaturasiz balandlik
+    var kb=Math.max(0, base - vv.height);       // faqat qisqargani = klaviatura
+    kb=kb>80?Math.round(kb):0;
+    if(kb===last) return;                        // o'zgarmasa — to'xta (loop yo'q)
+    last=kb;
+    document.documentElement.style.setProperty("--kb", kb+"px");
+    if(kb>0) setTimeout(scrollDown,60);
+  }
+  vv.addEventListener("resize", onVV);
+})();
 
 // ---- Yangi chat / Tarix tugmalari ----
 document.getElementById("newChatBtn").onclick=newChat;
