@@ -95,6 +95,13 @@ ELEMENTS_DIR       = os.path.join(_BASE_DIR, "elements")      # Rasmlar diskda: 
 PRICING_FILE       = os.path.join(_BASE_DIR, "pricing.json")  # tashqi narx konfiguratsiyasi (hot-reload)
 # Mini App URL — GitHub Pages ga joylaganingizdan keyin shu URL ga almashiring:
 MINI_APP_URL       = "https://qahramen.github.io/vorominiapp/?v=30"
+
+# Vagent mini-app (voro.uz/vagent.html) — imzolangan URL (VORO_BOT_SECRET web bilan bir xil)
+VORO_BOT_SECRET = os.environ.get("VORO_BOT_SECRET", "")
+def make_vagent_url(uid: int) -> str:
+    exp = int(time.time()) + 3600
+    sig = hmac.new(VORO_BOT_SECRET.encode(), f"{uid}:{exp}".encode(), hashlib.sha256).hexdigest()
+    return f"https://voro.uz/vagent.html?uid={uid}&exp={exp}&sig={sig}"
 # Admin kontakt — ulgurji kredit xaridlari uchun (pricing.json'dan hot-reload)
 ADMIN_CONTACT      = "vorouz"   # t.me/ADMIN_CONTACT
 
@@ -23560,9 +23567,11 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("vagent_pending_tool",  None)
         context.user_data.pop("vagent_gen_count",     None)
         context.user_data.pop("vagent_session_notes", None)
-        _vg_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(T("back_main_menu"), callback_data="vagent:exit")]
-        ])
+        _vg_rows = []
+        if VORO_BOT_SECRET:
+            _vg_rows.append([InlineKeyboardButton("✨ Vagent Studio (yangi)", web_app=WebAppInfo(make_vagent_url(q.from_user.id)))])
+        _vg_rows.append([InlineKeyboardButton(T("back_main_menu"), callback_data="vagent:exit")])
+        _vg_kb = InlineKeyboardMarkup(_vg_rows)
         await q.answer()
         await q.message.reply_text(
             T("mp6") + f"⚡️ {T('vg_balance')}: <b>{bal}⚡️</b>  ·  {T('vg_perreq')}: {VAGENT_LLM_COST}⚡️",
