@@ -476,11 +476,13 @@ def rate_ok(uid: str, limit: int = 15, window: int = 60) -> bool:
 SESSIONS: dict[str, Session] = {}
 SESSIONS_LOCK = asyncio.Lock()
 
-async def get_session(user_id: str) -> Session:
+async def get_session(user_id: str, chat_id: str = "") -> Session:
+    # Har "chat" alohida kontekst: kalit uid|chat_id. Balans/inbox esa uid bo'yicha.
+    key = f"{user_id}|{chat_id}" if chat_id else user_id
     async with SESSIONS_LOCK:
         for k in [k for k, s in SESSIONS.items() if time.time() - s.updated > SESSION_TTL]:
             SESSIONS.pop(k, None)
-        s = SESSIONS.setdefault(user_id, Session(user_id))
+        s = SESSIONS.setdefault(key, Session(user_id))
         s.updated = time.time()
         return s
 
@@ -1045,6 +1047,7 @@ class ChatIn(BaseModel):
     attachments: list[str] = []        # referens rasm URL'lari
     confirm_token: Optional[str] = None
     decline: bool = False
+    chat_id: str = ""                  # har suhbat alohida kontekst
 
 
 class UploadIn(BaseModel):
@@ -1071,7 +1074,7 @@ async def vagent_chat(body: ChatIn):
             yield sse("error", {"text": "Juda tez yozayapsiz 🙂 Bir daqiqadan keyin davom etamiz."})
         return StreamingResponse(limited(), media_type="text/event-stream")
 
-    sess = await get_session(body.uid)
+    sess = await get_session(body.uid, body.chat_id)
     sess.lang = (body.lang or "uz") if body.lang in ("uz","ru","en") else "uz"
 
     # Foydalanuvchi tugma o'rniga "ha"/"да"/"yes" deb YOZSA ham tasdiq deb qabul qilamiz

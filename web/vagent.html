@@ -105,8 +105,10 @@
   @media(max-width:359px){.brand-txt{display:none;}}
   /* EMBED: sayt ichida (iframe) — Vagent o'z header'ini yashiradi, sayt navi bor */
   html.embed header.topbar{display:none;}
-  html.embed #chat{padding-top:16px;}
-  html.embed .blobs{opacity:.6;}
+  html.embed #chat{padding-top:56px;}
+  /* embed'da fon sayt bilan BIR XIL bo'lsin — rangli bloblar deyarli ko'rinmasin */
+  html.embed .blobs{opacity:.05;}
+  html.embed body::after{opacity:.02;}
   .balance{display:flex;align-items:center;gap:6px;padding:8px 14px;
            border-radius:var(--r-pill);font-weight:700;font-size:14px;
            background:var(--glass-strong);
@@ -378,6 +380,50 @@
   #lightbox .lb-x{position:absolute;top:16px;right:18px;width:40px;height:40px;
     border-radius:50%;display:flex;align-items:center;justify-content:center;
     background:rgba(255,255,255,.12);color:#fff;font-size:22px;line-height:1;}
+
+  /* ---------- YANGI CHAT + TARIX ---------- */
+  #chatbar{position:fixed;z-index:31;
+    top:calc(env(safe-area-inset-top) + 10px);
+    left:50%;transform:translateX(-50%);
+    width:min(calc(100% - 24px),760px);
+    display:flex;justify-content:flex-end;gap:8px;pointer-events:none;}
+  html:not(.embed) #chatbar{top:calc(env(safe-area-inset-top) + 72px);}
+  .cb-btn{pointer-events:auto;display:flex;align-items:center;gap:6px;
+    padding:8px 13px;border-radius:var(--r-pill);cursor:pointer;
+    font-size:13px;font-weight:600;color:var(--text);
+    background:var(--glass-strong);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    border:1px solid var(--glass-border);
+    box-shadow:inset 0 1px 0 var(--glass-top), 0 4px 14px rgba(2,6,16,.4);
+    transition:transform .12s var(--spring);}
+  .cb-btn:active{transform:scale(.93);}
+  .cb-btn .ic{width:15px;height:15px;color:var(--cyan);}
+  @media(max-width:420px){.cb-lbl{display:none;} .cb-btn{padding:9px;}}
+
+  #histPanel{position:fixed;z-index:32;display:none;
+    top:calc(env(safe-area-inset-top) + 54px);
+    left:50%;transform:translateX(-50%);
+    width:min(calc(100% - 40px),360px);max-height:64vh;overflow-y:auto;
+    padding:8px;border-radius:18px;
+    background:rgba(13,14,18,.95);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    border:1px solid var(--glass-border);
+    box-shadow:0 22px 54px rgba(2,6,16,.75);}
+  html:not(.embed) #histPanel{top:calc(env(safe-area-inset-top) + 116px);}
+  #histPanel.show{display:block;animation:appear .2s var(--spring);}
+  .hist-hd{font-size:11.5px;color:var(--dim);font-weight:700;padding:6px 10px 8px;
+    text-transform:uppercase;letter-spacing:.05em;}
+  .hist-item{display:flex;align-items:center;gap:8px;padding:11px 12px;
+    border-radius:12px;cursor:pointer;transition:background .15s;}
+  .hist-item:active{background:rgba(255,255,255,.06);}
+  .hist-item.cur{background:rgba(43,212,255,.12);}
+  .hi-title{flex:1;min-width:0;font-size:14px;color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hi-del{flex:none;width:26px;height:26px;border-radius:8px;border:none;
+    background:transparent;color:var(--dim);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;}
+  .hi-del:active{background:rgba(255,90,110,.16);color:var(--red);}
+  .hist-empty{padding:18px;text-align:center;color:var(--dim);font-size:13px;}
 </style>
 </head>
 <body>
@@ -394,6 +440,18 @@
   <div class="sect" id="ava"><b>Vagent</b><i class="dot"></i></div>
   <div class="balance"><span class="star"><svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4.1-4 5.7-.8z"/></svg></span><span id="bal">…</span></div>
 </header>
+
+<div id="chatbar">
+  <button class="cb-btn" id="newChatBtn" title="Yangi suhbat">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    <span class="cb-lbl" data-t="new_chat">Yangi</span>
+  </button>
+  <button class="cb-btn" id="histToggle" title="Suhbatlar tarixi">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    <span class="cb-lbl" data-t="history">Tarix</span>
+  </button>
+</div>
+<div id="histPanel"></div>
 
 <div id="chat">
   <div class="empty" id="empty">
@@ -463,9 +521,9 @@ window.addEventListener("message",function(e){
   if(e&&e.data&&e.data.t==="vgpadb") applyPadb(e.data.v);
 });
 const I18N = {
-  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans", thinking:"O'ylayapman" },
-  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс", thinking:"Думаю" },
-  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance", thinking:"Thinking" },
+  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans", thinking:"O'ylayapman", new_chat:"Yangi", history:"Suhbatlar", no_chats:"Hali suhbat yo'q" },
+  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс", thinking:"Думаю", new_chat:"Новый", history:"Диалоги", no_chats:"Пока нет диалогов" },
+  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance", thinking:"Thinking", new_chat:"New", history:"Chats", no_chats:"No chats yet" },
 };
 let VT = I18N[AUTH.lang] || I18N.uz;
 function applyLang(){ try{
@@ -689,24 +747,118 @@ inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDef
 function quick(b){inp.value=b.textContent;sendMsg();}
 
 // ===== PROFIL + INBOX RECOVERY =====
+// ===== CHAT SAQLASH + SESSIYALAR =====
+const CHATS_KEY="vg_chats_"+AUTH.uid;
+function newId(){ return "c"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function loadChats(){ try{return JSON.parse(localStorage.getItem(CHATS_KEY)||"[]");}catch{return[];} }
+function saveChats(){ try{localStorage.setItem(CHATS_KEY,JSON.stringify(CHATS.slice(0,30)));}catch{} }
+let CHATS=loadChats();
+let CHAT_ID=(CHATS[0]&&CHATS[0].id)||newId();
+function activeChat(){
+  let c=CHATS.find(x=>x.id===CHAT_ID);
+  if(!c){ c={id:CHAT_ID,title:"",ts:Date.now(),log:[]}; CHATS.unshift(c); }
+  return c;
+}
+function logAppend(entry){
+  const c=activeChat();
+  c.log.push(entry); c.ts=Date.now();
+  if(!c.title && entry.t==="user" && entry.text) c.title=entry.text.slice(0,42);
+  CHATS=[c,...CHATS.filter(x=>x.id!==c.id)];
+  saveChats();
+}
+function renderLog(log){
+  (log||[]).forEach(e=>{
+    if(e.t==="user"){
+      hideEmpty();
+      let h=`<div class="msg user">${esc(e.text||"")}`;
+      (e.atts||[]).forEach(u=>{h+=`<img class="att" src="${mediaUrl(u)}" referrerpolicy="no-referrer">`;});
+      chat.appendChild(el(h+"</div>"));
+    } else if(e.t==="bot"){ hideEmpty(); const m=el(`<div class="msg bot"></div>`); m.innerHTML=md(e.text||""); chat.appendChild(m); }
+    else if(e.t==="result"){ hideEmpty(); renderResult(e); }
+    else if(e.t==="error"){ hideEmpty(); chat.appendChild(el(`<div class="err">${esc(e.text||"")}</div>`)); }
+  });
+  scrollDown();
+}
+function clearChatUI(){
+  [...chat.querySelectorAll(".msg,.result-card,.err,.status-chip,.prog,.opts,.confirm-card,.typing")].forEach(n=>n.remove());
+}
+function showGreeting(){
+  if(document.getElementById("empty")) return;
+  const e=el(`<div class="empty" id="empty"><div class="robot-big" data-robot></div><h2>${esc(VT.greeting)}</h2><p>${esc(VT.sub)}</p><div class="chips">${VT.chips.map(c=>`<button onclick="quick(this)">${esc(c)}</button>`).join("")}</div></div>`);
+  chat.appendChild(e);
+  e.querySelectorAll('[data-robot]').forEach(n=>{n.innerHTML=ROBOT_SVG;});
+}
+function newChat(){
+  if(activeChat().log.length===0) return; // allaqachon bo'sh
+  CHAT_ID=newId();
+  activeChat(); // yangi yozuv yaratadi
+  clearChatUI(); showGreeting(); closeHist();
+  progRows&&Object.keys(progRows).forEach(k=>delete progRows[k]);
+}
+function switchChat(id){
+  CHAT_ID=id; clearChatUI();
+  const c=activeChat();
+  if(c.log.length) renderLog(c.log); else showGreeting();
+  closeHist();
+}
+function delChat(id){
+  CHATS=CHATS.filter(x=>x.id!==id); saveChats();
+  if(id===CHAT_ID){ CHAT_ID=(CHATS[0]&&CHATS[0].id)||newId(); switchChat(CHAT_ID); }
+  else renderHist();
+}
+// ---- Tarix paneli ----
+function renderHist(){
+  const p=document.getElementById("histPanel"); if(!p) return;
+  const items=CHATS.filter(c=>c.log.length).map(c=>
+    `<div class="hist-item${c.id===CHAT_ID?' cur':''}" data-id="${c.id}">
+       <span class="hi-title">${esc(c.title||"Yangi suhbat")}</span>
+       <button class="hi-del" data-del="${c.id}" title="O'chirish">${ic('x',13)}</button>
+     </div>`).join("");
+  p.innerHTML=`<div class="hist-hd">${VT.history||"Suhbatlar"}</div>`+(items||`<div class="hist-empty">${VT.no_chats||"Hali suhbat yo'q"}</div>`);
+  p.querySelectorAll(".hist-item").forEach(it=>{
+    it.onclick=(ev)=>{ if(ev.target.closest(".hi-del")) return; switchChat(it.dataset.id); };
+  });
+  p.querySelectorAll(".hi-del").forEach(b=>{ b.onclick=(ev)=>{ev.stopPropagation(); delChat(b.dataset.del);}; });
+}
+function openHist(){ renderHist(); document.getElementById("histPanel").classList.add("show"); }
+function closeHist(){ document.getElementById("histPanel")?.classList.remove("show"); }
+function toggleHist(){ const p=document.getElementById("histPanel"); if(p&&p.classList.contains("show")) closeHist(); else openHist(); }
+
 async function boot(){
+  // 1) SAQLANGAN SUHBATNI TIKLAYMIZ (refresh/navigatsiyada yo'qolmaydi)
+  const c=activeChat();
+  if(c.log.length){ clearChatUI(); renderLog(c.log); }
   try{
     const r=await fetch(`${API_BASE}/me?${authQS}`);const d=await r.json();
     setBal(d.ok?d.balance:"—");
   }catch{setBal("—");}
+  // 2) INBOX: yo'qligingizda tayyor bo'lgan yangi natijalarni qo'shamiz (dedup)
   try{
     const since=Number(localStorage.getItem("vg_since")||0);
     const r=await fetch(`${API_BASE}/inbox?${authQS}&since=${since}`);
     const d=await r.json();
     if(d.ok&&d.items.length){
-      hideEmpty();
-      chat.appendChild(el(`<div class="status-chip">${ic('inbox',15)} Siz yo'qligingizda tayyor bo'lgan ishlar:</div>`));
-      d.items.forEach(i=>renderResult({kind:i.kind,url:i.url,label:i.label,price:i.price}));
+      const seen=new Set(c.log.filter(e=>e.t==="result").map(e=>e.url));
+      const fresh=d.items.filter(i=>!seen.has(i.url));
+      if(fresh.length){
+        hideEmpty();
+        fresh.forEach(i=>{ const e={t:"result",kind:i.kind,url:i.url,label:i.label,price:i.price}; renderResult(e); logAppend(e); });
+      }
       localStorage.setItem("vg_since",String(Math.max(...d.items.map(i=>i.ts))));
     }
   }catch{}
 }
 boot();
+
+// ---- Yangi chat / Tarix tugmalari ----
+document.getElementById("newChatBtn").onclick=newChat;
+document.getElementById("histToggle").onclick=(e)=>{e.stopPropagation();toggleHist();};
+document.addEventListener("click",(e)=>{
+  const p=document.getElementById("histPanel");
+  if(p&&p.classList.contains("show")&&!p.contains(e.target)&&!e.target.closest("#histToggle")) closeHist();
+});
+// tugma yorliqlarini tilga moslash
+(function(){ document.querySelectorAll("#chatbar .cb-lbl").forEach(s=>{const k=s.getAttribute("data-t"); if(VT[k])s.textContent=VT[k];}); })();
 
 // ===== RASM BIRIKTIRISH =====
 document.getElementById("attach").onclick=()=>fileInp.click();
@@ -785,6 +937,7 @@ function sendMsg(extra){
       if(im)h+=`<img class="att" src="${im.src}">`;});
     h+="</div>";
     chat.appendChild(el(h));
+    logAppend({t:"user",text:text,atts:atts});   // suhbatni saqlaymiz
   }
   attachments=[];attbar.innerHTML="";attbar.classList.remove("show");
   inp.value="";inp.style.height="auto";
@@ -800,6 +953,7 @@ async function stream(payload){
   showTyping(VT.thinking+"…");
   tg?.HapticFeedback?.impactOccurred("light");
   let botMsg=null,botBuf="";
+  function flushBot(){ if(botBuf&&botBuf.trim()) logAppend({t:"bot",text:botBuf}); botMsg=null;botBuf=""; }
 
   try{
     const resp=await fetch(`${API_BASE}/chat`,{method:"POST",
@@ -807,7 +961,7 @@ async function stream(payload){
       body:JSON.stringify({...AUTH,message:payload.message||"",
         attachments:payload.attachments||[],
         confirm_token:payload.confirm_token||null,
-        decline:!!payload.decline})});
+        decline:!!payload.decline, chat_id:CHAT_ID})});
 
     const reader=resp.body.getReader();
     const dec=new TextDecoder();let buf="";
@@ -829,6 +983,7 @@ async function stream(payload){
   }catch(e){
     chat.appendChild(el(`<div class="err">Aloqa uzildi — natijalar yo'qolmaydi, ilova qayta ochilganda keladi. (${esc(String(e))})</div>`));
   }
+  flushBot();
   busy=false;sendBtn.disabled=false;setState("","");hideTyping();scrollDown();
 
   function handle(ev,d){
@@ -837,7 +992,7 @@ async function stream(payload){
       botBuf+=d.delta;botMsg.innerHTML=md(botBuf);scrollDown();
     }
     else if(ev==="status"){
-      botMsg=null;botBuf="";setState("working",d.text);
+      flushBot();setState("working",d.text);
       // Statusni ANIMATSIYALI indikator sifatida ko'rsatamiz (embed'da header yashirin)
       showTyping(stripEmoji(d.text));
     }
@@ -852,19 +1007,21 @@ async function stream(payload){
       row.querySelector(".p-t").textContent=`${Math.round(pct)}% · ${d.elapsed}s`;
       row.querySelector(".p-fill").style.width=pct+"%";
     }
-    else if(ev==="confirm"){hideTyping();botMsg=null;botBuf="";renderConfirm(d);
+    else if(ev==="confirm"){hideTyping();flushBot();renderConfirm(d);
       tg?.HapticFeedback?.notificationOccurred("warning");}
     else if(ev==="result"){
-      hideTyping();botMsg=null;botBuf="";
+      hideTyping();flushBot();
       const row=progRows[d.label];if(row){row.remove();delete progRows[d.label];}
       renderResult(d);setBal(d.balance);
+      logAppend({t:"result",kind:d.kind,url:d.url,label:d.label,price:d.price});
       localStorage.setItem("vg_since",String(Math.floor(Date.now()/1000)));
       tg?.HapticFeedback?.notificationOccurred("success");
     }
     else if(ev==="balance"){setBal(d.balance);}
-    else if(ev==="options"){hideTyping();botMsg=null;botBuf="";renderOptions(d);}
-    else if(ev==="error"){hideTyping();botMsg=null;botBuf="";
-      chat.appendChild(el(`<div class="err">${esc(d.text)}</div>`));scrollDown();}
+    else if(ev==="options"){hideTyping();flushBot();renderOptions(d);}
+    else if(ev==="error"){hideTyping();flushBot();
+      chat.appendChild(el(`<div class="err">${esc(d.text)}</div>`));
+      logAppend({t:"error",text:d.text});scrollDown();}
   }
 }
 
