@@ -21550,6 +21550,7 @@ def lang_keyboard():
 
 
 I18N = {
+    "vagent_studio": {"uz": "✨ Vagent Studio (yangi)", "ru": "✨ Vagent Studio (новый)", "en": "✨ Vagent Studio (new)"},
     "back": {"uz": "◀️ Orqaga", "ru": "◀️ Назад", "en": "◀️ Back"},
     "home": {"uz": "🏠 Bosh sahifa", "ru": "🏠 Главная", "en": "🏠 Home"},
     "create_video": {"uz": "🎬 Video yaratish", "ru": "🎬 Создать видео", "en": "🎬 Create video"},
@@ -23569,7 +23570,7 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("vagent_session_notes", None)
         _vg_rows = []
         if VORO_BOT_SECRET:
-            _vg_rows.append([InlineKeyboardButton("✨ Vagent Studio (yangi)", web_app=WebAppInfo(make_vagent_url(q.from_user.id)))])
+            _vg_rows.append([InlineKeyboardButton(T("vagent_studio", q.from_user.id), web_app=WebAppInfo(make_vagent_url(q.from_user.id)))])
         _vg_rows.append([InlineKeyboardButton(T("back_main_menu"), callback_data="vagent:exit")])
         _vg_kb = InlineKeyboardMarkup(_vg_rows)
         await q.answer()
