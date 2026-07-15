@@ -319,6 +319,45 @@ def chats_write(user_id: str, chats: list) -> None:
         return True
     _locked_update(CHATS_JSON, {}, fn)
 
+
+def rebuild_messages(user_id: str, chat_id: str) -> list:
+    """Server-side saqlangan chat log'idan LLM kontekstini tiklaymiz.
+    Server restart / boshqa qurilma bo'lsa ham suhbat konteksti YO'QOLMAYDI
+    ("qaysi video haqida edik?" muammosi shundan edi)."""
+    if not chat_id:
+        return []
+    log = None
+    for c in chats_read(user_id):
+        if c.get("id") == chat_id:
+            log = c.get("log") or []
+            break
+    if not log:
+        return []
+    msgs: list = []
+    for e in log[-24:]:
+        t = e.get("t")
+        if t == "user" and e.get("text"):
+            role, text = "user", str(e["text"])
+        elif t == "bot" and e.get("text"):
+            role, text = "assistant", str(e["text"])
+        elif t == "result":
+            role, text = "assistant", f"[{e.get('label', 'ish')} yaratildi va foydalanuvchiga ko'rsatildi]"
+        else:
+            continue
+        # Claude qoidasi: rollar navbatlashsin — ketma-ket bir xil rolni birlashtiramiz
+        if msgs and msgs[-1]["role"] == role:
+            c0 = msgs[-1]["content"]
+            if isinstance(c0, str):
+                msgs[-1]["content"] = c0 + "\n" + text
+            else:
+                c0[-1]["text"] += "\n" + text
+        else:
+            msgs.append({"role": role,
+                         "content": text if role == "user" else [{"type": "text", "text": text}]})
+    while msgs and msgs[0]["role"] != "user":   # birinchi xabar user bo'lishi shart
+        msgs.pop(0)
+    return msgs
+
 # ============================================================
 # HMAC AUTH
 # ============================================================
@@ -1194,6 +1233,10 @@ async def vagent_chat(body: ChatIn):
 
     sess = await get_session(body.uid, body.chat_id)
     sess.lang = (body.lang or "uz") if body.lang in ("uz","ru","en") else "uz"
+    # KONTEKST TIKLASH: server restart/boshqa qurilma tufayli session bo'sh bo'lsa,
+    # saqlangan chat log'idan suhbat kontekstini tiklaymiz (agent unutmaydi).
+    if not sess.messages and body.chat_id and not body.confirm_token:
+        sess.messages = rebuild_messages(body.uid, body.chat_id)
 
     # Foydalanuvchi tugma o'rniga "ha"/"да"/"yes" deb YOZSA ham tasdiq deb qabul qilamiz
     _affirm = {"ha", "xa", "haa", "yes", "yeah", "yep", "ok", "okay", "okey",
