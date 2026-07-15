@@ -42,16 +42,17 @@
   }
 
   /* ---------- ORQA FON: suzuvchi rang dog'lari (shisha shulardan tiriladi) ---------- */
-  .blobs{position:fixed;inset:0;z-index:0;filter:blur(80px);}
-  .blob{position:absolute;border-radius:50%;opacity:.12;will-change:transform;}
-  .b1{width:44vh;height:44vh;left:-14vh;top:-12vh;
-      background:radial-gradient(circle,#2BD4FF,transparent 65%);
+  /* Fon — voro.uz sayti bilan BIR XIL: nozik cyan/blue glow (tekis qora emas) */
+  .blobs{position:fixed;inset:0;z-index:0;filter:blur(60px);}
+  .blob{position:absolute;border-radius:50%;will-change:transform;}
+  .b1{width:42vh;height:42vh;left:-8vh;top:-6vh;opacity:.26;
+      background:radial-gradient(circle,#2BD4FF,transparent 68%);
       animation:drift1 34s ease-in-out infinite alternate;}
-  .b2{width:36vh;height:36vh;right:-12vh;top:30vh;
-      background:radial-gradient(circle,#3D7BFF,transparent 65%);
+  .b2{width:38vh;height:38vh;right:-10vh;top:34vh;opacity:.22;
+      background:radial-gradient(circle,#0A84FF,transparent 68%);
       animation:drift2 40s ease-in-out infinite alternate;}
-  .b3{width:32vh;height:32vh;left:14vw;bottom:-12vh;
-      background:radial-gradient(circle,#19C8A5,transparent 65%);
+  .b3{width:30vh;height:30vh;left:16vw;bottom:-8vh;opacity:.14;
+      background:radial-gradient(circle,#0A84FF,transparent 68%);
       animation:drift3 37s ease-in-out infinite alternate;}
   @keyframes drift1{to{transform:translate(9vw,11vh) scale(1.15)}}
   @keyframes drift2{to{transform:translate(-11vw,14vh) scale(.9)}}
@@ -108,8 +109,8 @@
   html.embed header.topbar{display:none;}
   html.embed #chat{padding-top:56px;}
   /* embed'da fon sayt bilan BIR XIL bo'lsin — rangli bloblar deyarli ko'rinmasin */
-  html.embed .blobs{opacity:.05;}
-  html.embed body::after{opacity:.02;}
+  /* embed'da ham sayt bilan bir xil glow (kamaytirmaymiz) */
+  html.embed body::after{opacity:.03;}
   .balance{display:flex;align-items:center;gap:6px;padding:8px 14px;
            border-radius:var(--r-pill);font-weight:700;font-size:14px;
            background:var(--glass-strong);

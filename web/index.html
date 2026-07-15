@@ -458,12 +458,17 @@ lucide-react/dist/esm/lucide-react.js:
   function show(){
     ensureOverlay(); position();
     overlay.style.display="block"; shown=true; setActive(true);
+    // sahifa orqa fonda surilmasin/sakramasin (React'ni buzmaydigan xavfsiz usul)
     document.body.style.overflow="hidden";
+    document.body.style.overscrollBehavior="none";
+    document.documentElement.style.overscrollBehavior="none";
   }
   function hide(){
     if(overlay) overlay.style.display="none";
     shown=false; setActive(false);
     document.body.style.overflow="";
+    document.body.style.overscrollBehavior="";
+    document.documentElement.style.overscrollBehavior="";
   }
   function openVagent(){
     if(linkUrl){ show(); return; }
