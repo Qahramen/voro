@@ -1027,16 +1027,28 @@ boot();
 (function(){
   var vv=window.visualViewport; if(!vv) return;
   var base=vv.height, last=0;
-  function onVV(){
-    if(vv.height>base) base=vv.height;         // eng katta = klaviaturasiz balandlik
-    var kb=Math.max(0, base - vv.height);       // faqat qisqargani = klaviatura
-    kb=kb>80?Math.round(kb):0;
-    if(kb===last) return;                        // o'zgarmasa — to'xta (loop yo'q)
-    last=kb;
+  function typing(){
+    var ae=document.activeElement;
+    return !!(ae && (ae.tagName==="TEXTAREA" || ae.tagName==="INPUT" || ae.isContentEditable));
+  }
+  function setKb(kb){ if(kb===last) return; last=kb;
     document.documentElement.style.setProperty("--kb", kb+"px");
+    if(typeof measureComposer==="function") measureComposer();
     if(kb>0) setTimeout(scrollDown,60);
   }
+  function onVV(){
+    if(vv.height>base) base=vv.height;         // eng katta = klaviaturasiz balandlik
+    var kb=Math.max(0, base - vv.height);
+    kb=kb>120?Math.round(kb):0;
+    // FAQAT input FOKUSDA bo'lsa klaviatura deb hisoblaymiz — brauzer paneli/o'lcham o'zgarishi
+    // (composer o'rtaga chiqib qolishi) uchun emas.
+    if(!typing()) kb=0;
+    setKb(kb);
+  }
   vv.addEventListener("resize", onVV);
+  // input fokusdan chiqsa — klaviatura yopilgan, composer pastga qaytadi
+  document.addEventListener("focusout", function(){ setTimeout(function(){ if(!typing()) setKb(0); }, 50); });
+  document.addEventListener("focusin", onVV);
 })();
 
 // ===== COMPOSER balandligini o'lchab #chat pastki bo'shlig'ini moslaymiz =====
