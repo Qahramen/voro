@@ -710,7 +710,14 @@ async def atlas_create_job(kind: str, model: str, payload: dict) -> str:
         if refs:
             body["images"] = refs                     # video + referens rasmlar (0-5)
     elif refs:
-        if "reference-to-video" in model_id or len(refs) > 1:
+        if kind == "image" and "/edit" in model_id:
+            # RASM TAHRIRI (gpt-image-2/edit, nano-banana/edit): API "images" MASSIV field'ini kutadi
+            # (bot'da tasdiqlangan). "image" (yakka) esa noizchil edi — referens goho e'tiborga olinmasdi
+            # ("faqat qayta urinishda ishlardi"). gpt uchun input_fidelity=high — yuzni aniq saqlaydi.
+            body["images"] = refs
+            if "gpt-image" in model_id:
+                body["input_fidelity"] = "high"
+        elif "reference-to-video" in model_id or len(refs) > 1:
             body["images"] = refs
         else:
             body["image"] = refs[0]
