@@ -108,9 +108,11 @@
   /* EMBED: sayt ichida (iframe) — Vagent o'z header'ini yashiradi, sayt navi bor */
   html.embed header.topbar{display:none;}
   html.embed #chat{padding-top:56px;}
-  /* embed'da fon sayt bilan BIR XIL bo'lsin — rangli bloblar deyarli ko'rinmasin */
-  /* embed'da ham sayt bilan bir xil glow (kamaytirmaymiz) */
-  html.embed body::after{opacity:.03;}
+  /* embed'da Vagent'ning O'Z foni BO'LMAYDI — sayt foni (overlay glow) ko'rinadi.
+     iframe shaffof, o'z blob/noise'lari yashirin -> chetda seam bo'lmaydi. */
+  html.embed body{background:transparent;}
+  html.embed .blobs{display:none;}
+  html.embed body::after{display:none;}
   .balance{display:flex;align-items:center;gap:6px;padding:8px 14px;
            border-radius:var(--r-pill);font-weight:700;font-size:14px;
            background:var(--glass-strong);

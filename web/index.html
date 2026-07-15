@@ -416,18 +416,24 @@ lucide-react/dist/esm/lucide-react.js:
 <script>
 (function(){
   var ICON16='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><circle cx="9" cy="14" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.2" fill="currentColor" stroke="none"/><path d="M12 8V4.5M8.5 4.5h7"/></svg>';
-  var overlay=null, frame=null, linkUrl=null, loading=false, shown=false;
+  var overlay=null, frame=null, linkUrl=null, loading=false, shown=false, prefetching=false;
 
+  // voro.uz sayti foni bilan BIR XIL glow — Vagent'ning O'Z foni bo'lmaydi (seam yo'q)
+  function siteBg(){
+    return "radial-gradient(52vh 52vh at 10% 5%, rgba(43,212,255,.15), rgba(0,0,0,0) 60%),"
+         + "radial-gradient(48vh 48vh at 90% 84%, rgba(10,132,255,.13), rgba(0,0,0,0) 60%), #070809";
+  }
   function ensureOverlay(){
     if(overlay) return overlay;
     overlay=document.createElement("div");
     overlay.id="voro-vagent-overlay";
-    overlay.style.cssText="position:fixed;left:0;right:0;z-index:35;display:none;background:#070809;";
+    overlay.style.cssText="position:fixed;left:0;right:0;z-index:35;display:none;background:"+siteBg()+";";
     frame=document.createElement("iframe");
     frame.id="voro-vagent-frame";
     frame.setAttribute("allow","microphone; clipboard-write");
     frame.setAttribute("title","Vagent");
-    frame.style.cssText="width:100%;max-width:1240px;height:100%;border:0;display:block;margin:0 auto;background:#070809;";
+    // iframe SHAFFOF — overlay'dagi sayt foni ko'rinadi (seam bo'lmaydi)
+    frame.style.cssText="width:100%;max-width:1240px;height:100%;border:0;display:block;margin:0 auto;background:transparent;";
     overlay.appendChild(frame);
     document.body.appendChild(overlay);
     window.addEventListener("resize",position);
@@ -439,14 +445,15 @@ lucide-react/dist/esm/lucide-react.js:
     var dr=dock.getBoundingClientRect();
     return Math.max(0,Math.round(window.innerHeight-dr.top)+14);
   }
+  function withParams(u){ return u+(u.indexOf("?")>=0?"&":"?")+"embed=1&padb="+calcPadb(); }
   function position(){
     if(!overlay) return;
     var nav=document.querySelector("nav.top-nav");
     var wrap=nav?(nav.closest("header")||nav.parentElement):null;
     var top=wrap?Math.round(wrap.getBoundingClientRect().bottom):56;
     overlay.style.top=top+"px";
-    overlay.style.bottom="0px";           // fon pastgacha yopadi
-    var padb=calcPadb();                  // composer'ni dock ustiga surish
+    overlay.style.bottom="0px";
+    var padb=calcPadb();
     if(frame&&frame.contentWindow){ try{ frame.contentWindow.postMessage({t:"vgpadb",v:padb},"*"); }catch(e){} }
   }
   function setActive(on){
@@ -458,7 +465,7 @@ lucide-react/dist/esm/lucide-react.js:
   function show(){
     ensureOverlay(); position();
     overlay.style.display="block"; shown=true; setActive(true);
-    // sahifa orqa fonda surilmasin/sakramasin (React'ni buzmaydigan xavfsiz usul)
+    try{ if(location.hash!=="#vagent") history.replaceState(null,"","#vagent"); }catch(e){}  // refresh Vagent'da qolsin
     document.body.style.overflow="hidden";
     document.body.style.overscrollBehavior="none";
     document.documentElement.style.overscrollBehavior="none";
@@ -466,18 +473,29 @@ lucide-react/dist/esm/lucide-react.js:
   function hide(){
     if(overlay) overlay.style.display="none";
     shown=false; setActive(false);
+    try{ if(location.hash==="#vagent") history.replaceState(null,"",location.pathname+location.search); }catch(e){}
     document.body.style.overflow="";
     document.body.style.overscrollBehavior="";
     document.documentElement.style.overscrollBehavior="";
   }
+  // Ochishni TEZ qilish uchun link'ni oldindan olib qo'yamiz
+  function prefetch(){
+    if(linkUrl||prefetching) return; prefetching=true;
+    fetch("/api/vagent-link",{credentials:"include"}).then(function(r){return r.json();}).then(function(d){
+      prefetching=false;
+      if(d&&d.url){ linkUrl=withParams(d.url); ensureOverlay(); if(!frame.src) frame.src=linkUrl; }
+    }).catch(function(){ prefetching=false; });
+  }
   function openVagent(){
-    if(linkUrl){ show(); return; }
+    ensureOverlay();
+    if(linkUrl){ if(!frame.src) frame.src=linkUrl; show(); return; }   // darrov ochiladi
+    show();                                                            // overlay'ni DARROV ko'rsatamiz (loading)
     if(loading) return; loading=true;
     fetch("/api/vagent-link",{credentials:"include"}).then(function(r){return r.json();}).then(function(d){
       loading=false;
-      if(d&&d.url){ linkUrl=d.url+(d.url.indexOf("?")>=0?"&":"?")+"embed=1&padb="+calcPadb(); ensureOverlay(); frame.src=linkUrl; show(); }
-      else { alert("Vagent — avval saytga kiring (Sign in)."); }
-    }).catch(function(){ loading=false; alert("Vagent — avval saytga kiring (Sign in)."); });
+      if(d&&d.url){ linkUrl=withParams(d.url); frame.src=linkUrl; }
+      else { hide(); alert("Vagent — avval saytga kiring (Sign in)."); }
+    }).catch(function(){ loading=false; hide(); alert("Vagent — avval saytga kiring (Sign in)."); });
   }
 
   function addNav(){
@@ -492,10 +510,36 @@ lucide-react/dist/esm/lucide-react.js:
         b.onclick=function(e){ e.preventDefault(); e.stopPropagation(); openVagent(); };
         nav.appendChild(b);
       }
+      fixHome();
     }catch(e){}
   }
 
-  // Boshqa nav/dock/brand tugmasi bosilsa Vagent yopiladi (saytga qaytadi)
+  // Tepa nav'dan "Bosh sahifa" tugmasini olib tashlash; brand (voro.uz) -> home
+  var homeBtn=null;
+  function fixHome(){
+    var nav=document.querySelector("nav.top-nav"); if(!nav) return;
+    if(!homeBtn){
+      [].slice.call(nav.querySelectorAll("button.tap")).forEach(function(b){
+        if(homeBtn||b.id==="voro-vnav") return;
+        var t=(b.textContent||"").trim().toLowerCase();
+        if(b.querySelector(".lucide-home")||b.querySelector('svg path[d^="m3 9"]')||t==="bosh sahifa"||t==="bosh"||t==="home"||t==="главная") homeBtn=b;
+      });
+    }
+    if(homeBtn) homeBtn.style.display="none";
+    // brand: "voro.uz" yozuvli tugma -> bosh sahifaga qaytadi
+    var brand=[].slice.call(document.querySelectorAll("button.tap,a")).find(function(el){
+      return (el.textContent||"").trim().toLowerCase()==="voro.uz";
+    });
+    if(brand && !brand.__voroWired){
+      brand.__voroWired=true; brand.style.cursor="pointer";
+      brand.addEventListener("click",function(){
+        if(shown) hide();
+        if(homeBtn){ try{ homeBtn.click(); }catch(e){} }
+      }, true);
+    }
+  }
+
+  // Boshqa nav/dock tugmasi bosilsa Vagent yopiladi (saytga qaytadi)
   document.addEventListener("click",function(e){
     if(!shown) return;
     var b=e.target.closest ? e.target.closest("button") : null;
@@ -507,6 +551,11 @@ lucide-react/dist/esm/lucide-react.js:
   var obs=new MutationObserver(addNav);
   obs.observe(document.body,{childList:true,subtree:true});
   addNav();
+
+  // Vagent'da turib REFRESH qilinsa — Vagent'da qolamiz (main'ga qaytmaydi)
+  if(location.hash==="#vagent"){ setTimeout(openVagent, 250); }
+  // ochishni tez qilish uchun oldindan link
+  setTimeout(prefetch, 1200);
 })();
 </script>
 </body>
