@@ -125,7 +125,7 @@
   /* ---------- CHAT ---------- */
   #chat{flex:1 1 auto;min-height:0;overflow-y:auto;z-index:2;position:relative;
         overscroll-behavior:none;   /* scroll orqa fonga o'tmasin, bounce ham bo'lmasin */
-        padding:10px max(14px,calc((100% - 760px)/2)) calc(var(--padb) + var(--kb) + env(safe-area-inset-bottom) + var(--composerh, 88px) + 18px);
+        padding:10px max(14px,calc((100% - 760px)/2)) var(--chatpad, 190px);
         display:flex;flex-direction:column;gap:10px;
         -webkit-overflow-scrolling:touch;}
   /* MUHIM: chat bolalari HECH QACHON siqilmasin (uzun suhbatda karta/rasm
@@ -605,7 +605,9 @@ if(EMBED) document.documentElement.classList.add("embed");
 // padb: sayt pastki dock'i ustidan composer'ni surish uchun (parent'dan keladi)
 function applyPadb(v){ v=parseInt(v,10)||0;
   document.documentElement.style.setProperty("--padb",(v>0?v:10)+"px");
-  document.body.style.paddingBottom=""; }
+  document.body.style.paddingBottom="";
+  // padb o'zgargach composer'ning o'rni siljiydi — #chat pastki bo'shlig'ini qayta o'lchaymiz
+  if(typeof measureComposer==="function"){ requestAnimationFrame(measureComposer); setTimeout(measureComposer,80); } }
 if(EMBED) applyPadb(qp.get("padb"));
 window.addEventListener("message",function(e){
   if(e&&e.data&&e.data.t==="vgpadb") applyPadb(e.data.v);
@@ -816,12 +818,12 @@ const progRows = {};
 
 function el(h){const d=document.createElement("div");d.innerHTML=h.trim();return d.firstChild;}
 function scrollDown(){
-  // layout REFLOW'dan keyin scroll (birinchi renderда tugma berkinmasin) + qayta o'lchov
+  // layout reflow / rasm yuklanishi / padding o'zgarishiga chidamli — bir necha frame pastda ushlaymiz
   if(typeof measureComposer==="function") measureComposer();
-  requestAnimationFrame(function(){
-    chat.scrollTop=chat.scrollHeight;
-    setTimeout(function(){ chat.scrollTop=chat.scrollHeight; }, 60);
-  });
+  var c=document.getElementById("chat"); if(!c) return;
+  var n=0;
+  (function pin(){ c.scrollTop=c.scrollHeight; if(++n<7) requestAnimationFrame(pin); })();
+  setTimeout(function(){ c.scrollTop=c.scrollHeight; }, 120);
 }
 function hideEmpty(){document.getElementById("empty")?.remove();}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -1035,7 +1037,16 @@ boot();
 // (tugmalar/natijalar pastki panel va sayt bari ortiga yashirinib qolmasin)
 function measureComposer(){
   var footer=document.querySelector("footer");
-  if(footer) document.documentElement.style.setProperty("--composerh", Math.max(64,Math.round(footer.offsetHeight))+"px");
+  if(!footer) return;
+  var c=document.getElementById("chat");
+  var wasBottom = c && (c.scrollTop + c.clientHeight >= c.scrollHeight - 4);
+  // Composer'ning HAQIQIY yuqori chetini o'lchaymiz (padb/safe/kb/balandlik — hammasi hisobga olinadi).
+  // #chat pastki bo'shlig'i = shuncha + zaxira → oxirgi tugma HAR DOIM composer ustida qoladi.
+  var need = Math.round(window.innerHeight - footer.getBoundingClientRect().top) + 20;
+  if(!(need > 0)) need = 190;
+  document.documentElement.style.setProperty("--chatpad", Math.max(96, need) + "px");
+  // padding o'zgargach pastda edikmi — qayta pastga surib qo'yamiz (tugma berkinmasin)
+  if(wasBottom && c) requestAnimationFrame(function(){ c.scrollTop=c.scrollHeight; });
 }
 (function(){
   var footer=document.querySelector("footer");
@@ -1047,6 +1058,8 @@ function measureComposer(){
   if(window.ResizeObserver){ try{ new ResizeObserver(measureComposer).observe(footer); }catch(e){} }
   window.addEventListener("resize", measureComposer);
   if(window.visualViewport) window.visualViewport.addEventListener("resize", measureComposer);
+  // rasm/video yuklanib bo'lgach balandlik o'zgaradi — qayta scroll (tugma berkinmasin)
+  chat.addEventListener("load", function(){ scrollDown(); }, true);
 })();
 
 // ===== OVERSCROLL guard: chat qisqa bo'lsa (yoki chekkada) orqa fon/sayt scroll bo'lmasin (iOS bounce) =====
