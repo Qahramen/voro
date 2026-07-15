@@ -172,6 +172,13 @@ def _locked_update(path: str, default: Any, fn):
         finally:
             fcntl.flock(lk, fcntl.LOCK_UN)
 
+
+async def _offload(fn, *a):
+    """Bloklovchi JSON yozishni (fcntl+fsync, butun-fayl qayta yozish) event
+    loop'dan tashqariga chiqaradi. 100 user birdaniga generatsiya tugatganda
+    fsync'lar loop'ni to'xtatmasin. fcntl lock thread'lar aro ham serialize qiladi."""
+    return await asyncio.get_event_loop().run_in_executor(None, fn, *a)
+
 # ============================================================
 # BALANS — INTEGRATSIYA: botdagi helper bo'lsa, shuni import qiling
 # ============================================================
@@ -1136,7 +1143,7 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
             last_err = err2 or last_err
 
     if not result or result.get("status") != "ok":
-        refund_credits(uid, price)
+        await _offload(refund_credits, uid, price)
         track(uid, "gen_fail", {"price": price, "model": j["model"],
                                 "error": str(last_err)[:100], "attempts": max_attempts})
         return {"label": label,
@@ -1145,8 +1152,8 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
     track(uid, "gen_ok", {"price": price, "model": used_model, "kind": j["kind"]})
     entry = {"label": label, "model": j["model"], "price": price,
              "kind": j["kind"], "url": result["url"], "ts": int(time.time())}
-    memory_log_job(uid, entry)
-    inbox_push(uid, entry)  # SSE uzilgan bo'lsa ham natija saqlanadi
+    await _offload(memory_log_job, uid, entry)
+    await _offload(inbox_push, uid, entry)  # SSE uzilgan bo'lsa ham natija saqlanadi
     await emit("result", {"kind": j["kind"], "url": result["url"], "label": label,
                           "price": price, "balance": get_balance(uid)})
     return {"label": label, "status": "ok", "kind": j["kind"],
@@ -1349,7 +1356,7 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
             return {"elementlar": [], "izoh": f"Kutubxona hozircha ulanmagan ({e})."}
 
     if name == "remember_fact":
-        memory_add_fact(uid, inp["fact"])
+        await _offload(memory_add_fact, uid, inp["fact"])
         return {"status": "saqlandi"}
 
     return {"error": f"Noma'lum tool: {name}"}
@@ -2119,7 +2126,7 @@ async def vagent_chats_post(body: ChatsIn):
     """Suhbatlarni serverga saqlash (har o'zgarishda frontend yuboradi)."""
     if not verify_auth(body.uid, body.exp, body.sig):
         return {"ok": False, "error": "auth"}
-    chats_write(body.uid, body.chats)
+    await _offload(chats_write, body.uid, body.chats)
     return {"ok": True}
 
 
