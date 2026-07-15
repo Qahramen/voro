@@ -790,6 +790,7 @@ class Session:
         self.confirmed_token: Optional[str] = None
         self.run_confirmed: bool = False   # tasdiqdan keyin generatsiyani DETERMINISTIK boshlash
         self.pending_refs: list[str] = []  # foydalanuvchi biriktirgan referens rasmlar (deterministik)
+        self.refs_shown: bool = False      # referens rasm(lar) Claude'ga bir marta ko'rsatildimi
         self.pending_video: str = ""       # foydalanuvchi biriktirgan video (tahrir/motion manba)
         self.pending_video_dur: int = 5    # video davomiyligi (narx uchun)
         self.video_frame_shown: bool = False  # kadr Claude'ga bir marta ko'rsatildimi (kontekstni shishirmaslik)
@@ -1519,6 +1520,7 @@ async def run_confirmed_generation(sess: "Session", emit):
                          {"jobs": q["jobs"], "is_iteration": bool(q.get("is_iteration"))},
                          sess, emit)
     sess.pending_refs = []               # referens ishlatildi — tozalaymiz
+    sess.refs_shown = False
     sess.pending_video = ""
     sess.video_frame_shown = False       # keyingi video uchun kadr qayta ko'rsatiladi
     if out.get("error"):
@@ -1555,6 +1557,7 @@ class ChatIn(BaseModel):
     lang: str = "uz"
     message: str = ""
     attachments: list[str] = []        # referens rasm URL'lari
+    pending_refs: list[str] = []       # "yopishqoq" referens rasm URL'lari — generatsiyagacha har xabarda qayta yuboriladi
     pending_video: str = ""            # "yopishqoq" video URL — generatsiyagacha har xabarda qayta yuboriladi
     confirm_token: Optional[str] = None
     decline: bool = False
@@ -1626,15 +1629,32 @@ async def vagent_chat(body: ChatIn):
     if _sticky_vid:
         _vids = [body.pending_video.strip()]
 
+    # YOPISHQOQ REFERENS RASM: yangi rasm biriktirilmagan bo'lsa-yu frontend suhbatdagi referens
+    # URL(lar)ni qayta yuborsa — server restart / boshqa qurilma bo'lsa ham referens rasm
+    # generatsiyaga YETIB BORADI (aks holda text-to-image bo'lib, o'xshamas natija chiqardi).
+    _sticky_refs = [u for u in (body.pending_refs or [])[:4] if u] if not _imgs else []
+
     _content = []
     if _imgs:
         sess.pending_refs = _imgs
+        sess.refs_shown = False
         for url in _imgs:
             user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
             _b64, _mt = _vision_b64(url)
             if _b64:
                 _content.append({"type": "image",
                                  "source": {"type": "base64", "media_type": _mt, "data": _b64}})
+        sess.refs_shown = True
+    elif _sticky_refs:
+        sess.pending_refs = _sticky_refs
+        user_text += f"\n[SUHBATDAGI RASM referens sifatida ishlatiladi: {', '.join(_sticky_refs)} — generatsiyada shu rasmni ASOS qil]"
+        if not sess.refs_shown:                 # rebuild'dan keyin — agent rasmni bir marta ko'rsin
+            for url in _sticky_refs:
+                _b64, _mt = _vision_b64(url)
+                if _b64:
+                    _content.append({"type": "image",
+                                     "source": {"type": "base64", "media_type": _mt, "data": _b64}})
+            sess.refs_shown = True
     if _vids:
         vurl = _vids[0]
         if not _sticky_vid and vurl != sess.pending_video:

@@ -912,6 +912,12 @@ let CHAT_ID=(CHATS[0]&&CHATS[0].id)||newId();
 function pvKey(){ return "vg_pv_"+CHAT_ID; }
 function getPV(){ try{ return localStorage.getItem(pvKey())||""; }catch{ return ""; } }
 function setPV(u){ try{ if(u) localStorage.setItem(pvKey(),u); else localStorage.removeItem(pvKey()); }catch{} }
+// Yopishqoq REFERENS RASM(lar): generatsiyagacha eslab turamiz (agent taklifidan foydalanilса ham
+// referens generatsiyaga yetib boradi; server restart/boshqa qurilma bo'lsa ham yo'qolmaydi).
+function prKey(){ return "vg_pr_"+CHAT_ID; }
+function getRefs(){ try{ return JSON.parse(localStorage.getItem(prKey())||"[]"); }catch{ return []; } }
+function setRefs(a){ try{ if(a&&a.length) localStorage.setItem(prKey(),JSON.stringify(a.slice(0,4))); else localStorage.removeItem(prKey()); }catch{} }
+function addRef(u){ if(!u) return; var a=getRefs(); if(a.indexOf(u)<0){ a.push(u); setRefs(a); } }
 function activeChat(){
   let c=CHATS.find(x=>x.id===CHAT_ID);
   if(!c){ c={id:CHAT_ID,title:"",ts:Date.now(),log:[]}; CHATS.unshift(c); }
@@ -1176,6 +1182,7 @@ async function addAttachment(f){
     if(d.ok){
       entry.url=d.url;chip.classList.remove("loading");
       if(d.kind==="video") setPV(d.url);
+      else addRef(d.url);   // rasm — yopishqoq referens (generatsiyagacha eslab turiladi)
     }
     else{chip.remove();attachments=attachments.filter(a=>a!==entry);
          chat.appendChild(el(`<div class="err">${esc(VT.up_fail)}: ${esc(d.error||"")}</div>`));}
@@ -1290,6 +1297,7 @@ async function stream(payload){
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({...AUTH,message:payload.message||"",
         attachments:payload.attachments||[],
+        pending_refs:getRefs(),          // yopishqoq referens rasm(lar) — generatsiyaga yetib boradi
         pending_video:getPV(),           // yopishqoq video — agent suhbatdagi videoni unutmaydi
         confirm_token:payload.confirm_token||null,
         decline:!!payload.decline, chat_id:CHAT_ID})});
@@ -1348,7 +1356,7 @@ async function stream(payload){
       const row=progRows[d.label];if(row){row.remove();delete progRows[d.label];}
       renderResult(d);setBal(d.balance);
       logAppend({t:"result",kind:d.kind,url:d.url,label:d.label,price:d.price});
-      setPV("");   // video ishlatildi — yopishqoqlikni tozalaymiz
+      setPV(""); setRefs([]);   // video/referens ishlatildi — yopishqoqlikni tozalaymiz
       localStorage.setItem("vg_since",String(Math.floor(Date.now()/1000)));
       tg?.HapticFeedback?.notificationOccurred("success");
     }
