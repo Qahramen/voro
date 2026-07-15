@@ -516,6 +516,32 @@ def _extract_frame_b64(path: str):
         return None, None
 
 
+_FRAME_CACHE: dict = {}   # video_url -> (b64, mime, dur); kadr keshi (qayta ajratmaslik = tez)
+
+
+def _video_frame_cached(vurl: str):
+    """Video URL uchun (kadr_b64, mime, davomiylik) — keshdan yoki bir marta ajratib."""
+    if not vurl:
+        return (None, None, 5)
+    if vurl in _FRAME_CACHE:
+        return _FRAME_CACHE[vurl]
+    fb, fm, dur = None, None, 5
+    try:
+        name = vurl.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
+        path = os.path.join(UPLOADS_DIR, name)
+        if os.path.exists(path):
+            dur = _video_duration(path)
+            fb, fm = _extract_frame_b64(path)
+    except Exception:
+        pass
+    res = (fb, fm, dur)
+    if fb:
+        _FRAME_CACHE[vurl] = res            # faqat muvaffaqiyatli kadrni keshlaymiz
+        if len(_FRAME_CACHE) > 200:
+            _FRAME_CACHE.pop(next(iter(_FRAME_CACHE)))
+    return res
+
+
 async def _atlas_upload_video(url):
     """Lokal video URL'ni Atlas uploadMedia orqali aliyuncs URL'ga yuklaydi (video-edit uchun)."""
     try:
@@ -645,6 +671,7 @@ class Session:
         self.pending_refs: list[str] = []  # foydalanuvchi biriktirgan referens rasmlar (deterministik)
         self.pending_video: str = ""       # foydalanuvchi biriktirgan video (tahrir/motion manba)
         self.pending_video_dur: int = 5    # video davomiyligi (narx uchun)
+        self.video_frame_shown: bool = False  # kadr Claude'ga bir marta ko'rsatildimi (kontekstni shishirmaslik)
         self.last_jobs: list[dict] = []
         self.active_jobs = 0
         self.updated = time.time()
@@ -1272,6 +1299,7 @@ async def run_confirmed_generation(sess: "Session", emit):
                          sess, emit)
     sess.pending_refs = []               # referens ishlatildi — tozalaymiz
     sess.pending_video = ""
+    sess.video_frame_shown = False       # keyingi video uchun kadr qayta ko'rsatiladi
     if out.get("error"):
         await emit("error", {"text": out["error"]})
         return
@@ -1305,6 +1333,7 @@ class ChatIn(BaseModel):
     lang: str = "uz"
     message: str = ""
     attachments: list[str] = []        # referens rasm URL'lari
+    pending_video: str = ""            # "yopishqoq" video URL — generatsiyagacha har xabarda qayta yuboriladi
     confirm_token: Optional[str] = None
     decline: bool = False
     chat_id: str = ""                  # har suhbat alohida kontekst
@@ -1363,35 +1392,43 @@ async def vagent_chat(body: ChatIn):
         user_text = body.message.strip() or "Salom!"
         track(body.uid, "msg")
 
+    _vext = ("mp4", "webm", "mov", "m4v")
     _atts = [u for u in body.attachments[:4] if u]
-    if _atts:
-        # RASM va VIDEO'ni ajratamiz (video-edit uchun video alohida)
-        _imgs = [u for u in _atts if not u.rsplit(".", 1)[-1].split("?")[0].lower() in ("mp4", "webm", "mov", "m4v")]
-        _vids = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() in ("mp4", "webm", "mov", "m4v")]
+    # RASM va VIDEO'ni ajratamiz (video-edit uchun video alohida)
+    _imgs = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() not in _vext]
+    _vids = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() in _vext]
+    # YOPISHQOQ VIDEO: yangi video biriktirilmagan bo'lsa-yu, frontend suhbatdagi video URL'ni
+    # qayta yuborsa — server restart / boshqa qurilma bo'lsa ham agent videoni UNUTMAYDI.
+    _sticky_vid = bool(body.pending_video and not _vids)
+    if _sticky_vid:
+        _vids = [body.pending_video.strip()]
+
+    _content = []
+    if _imgs:
         sess.pending_refs = _imgs
-        _content = []
         for url in _imgs:
             user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
             _b64, _mt = _vision_b64(url)
             if _b64:
                 _content.append({"type": "image",
                                  "source": {"type": "base64", "media_type": _mt, "data": _b64}})
-        if _vids:
-            vurl = _vids[0]
-            sess.pending_video = vurl
+    if _vids:
+        vurl = _vids[0]
+        sess.pending_video = vurl
+        if _sticky_vid:
+            user_text += f"\n[SUHBATDAGI VIDEO (tahrirlanmoqda): {vurl} — bu videoni ishlat, qayta so'rama]"
+        else:
             user_text += f"\n[BIRIKTIRILGAN VIDEO: {vurl} — foydalanuvchi VIDEO TAHRIR qilmoqchi bo'lishi mumkin]"
-            # (a) videodan 1 kadr olib Claude'ga ko'rsatamiz (nima tahrir kerakligini tushunsin)
-            try:
-                _vname = vurl.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
-                _vpath = os.path.join(UPLOADS_DIR, _vname)
-                if os.path.exists(_vpath):
-                    sess.pending_video_dur = _video_duration(_vpath)
-                    _fb, _fm = _extract_frame_b64(_vpath)
-                    if _fb:
-                        _content.append({"type": "image",
-                                         "source": {"type": "base64", "media_type": _fm, "data": _fb}})
-            except Exception:
-                pass
+        # (a) videodan 1 kadr olib Claude'ga BIR MARTA ko'rsatamiz (kontekstni shishirmaslik uchun keshdan).
+        # rebuild'dan keyin video_frame_shown=False bo'ladi → kadr qayta ko'rsatiladi (agent ko'radi).
+        _fb, _fm, _dur = _video_frame_cached(vurl)
+        if _dur:
+            sess.pending_video_dur = _dur
+        if _fb and not sess.video_frame_shown:
+            _content.append({"type": "image",
+                             "source": {"type": "base64", "media_type": _fm, "data": _fb}})
+            sess.video_frame_shown = True
+    if _content:
         _content.append({"type": "text", "text": user_text})
         sess.messages.append({"role": "user", "content": _content})
     else:
@@ -1443,29 +1480,24 @@ async def vagent_chat(body: ChatIn):
 MAX_VIDEO_MB = 45   # video referens (≤30s) uchun kattaroq limit
 
 
-@vagent_router.post("/upload")
-async def vagent_upload(body: UploadIn):
-    """Referens RASM yoki VIDEO yuklash → public URL."""
-    if not verify_auth(body.uid, body.exp, body.sig):
-        return {"ok": False, "error": "auth"}
-    try:
-        raw = base64.b64decode(body.data_b64)
-    except Exception:
-        return {"ok": False, "error": "base64 xato"}
-    is_video = (body.mime or "").startswith("video/")
+def _save_upload(uid: str, raw: bytes, mime: str) -> dict:
+    """Yuklangan xom baytlarni faylga saqlab, public URL qaytaradi (base64/raw ikkalasi ham shu yerga keladi)."""
+    is_video = (mime or "").startswith("video/")
     limit = MAX_VIDEO_MB if is_video else MAX_UPLOAD_MB
+    if not raw:
+        return {"ok": False, "error": "bo'sh fayl"}
     if len(raw) > limit * 1024 * 1024:
         return {"ok": False, "error": f"Fayl {limit}MB dan katta"}
     if is_video:
-        ext = _MIME_VIDEO_EXT.get(body.mime, "mp4")
+        ext = _MIME_VIDEO_EXT.get(mime, "mp4")
     else:
-        ext = {"image/png": "png", "image/webp": "webp"}.get(body.mime, "jpg")
-    name = f"{body.uid}_{uuid.uuid4().hex[:10]}.{ext}"
+        ext = {"image/png": "png", "image/webp": "webp"}.get(mime, "jpg")
+    name = f"{uid}_{uuid.uuid4().hex[:10]}.{ext}"
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     path = os.path.join(UPLOADS_DIR, name)
     with open(path, "wb") as f:
         f.write(raw)
-    track(body.uid, "upload_video" if is_video else "upload")
+    track(uid, "upload_video" if is_video else "upload")
     resp = {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "video" if is_video else "image"}
     if is_video:
         dur = _video_duration(path)
@@ -1474,6 +1506,31 @@ async def vagent_upload(body: UploadIn):
             return {"ok": False, "error": "Video 30 sekunddan uzun — qisqaroq yuklang"}
         resp["duration"] = dur
     return resp
+
+
+@vagent_router.post("/upload")
+async def vagent_upload(body: UploadIn):
+    """Referens RASM yoki VIDEO yuklash (base64 JSON) → public URL. (Eski yo'l — moslik uchun.)"""
+    if not verify_auth(body.uid, body.exp, body.sig):
+        return {"ok": False, "error": "auth"}
+    try:
+        raw = base64.b64decode(body.data_b64)
+    except Exception:
+        return {"ok": False, "error": "base64 xato"}
+    return _save_upload(body.uid, raw, body.mime)
+
+
+@vagent_router.post("/upload-raw")
+async def vagent_upload_raw(request: Request):
+    """TEZ yuklash: XOM binary (base64 yo'q → 33% kichik + pydantic parse yo'q). Auth va mime header'da."""
+    uid = request.headers.get("x-uid", "")
+    exp = request.headers.get("x-exp", "")
+    sig = request.headers.get("x-sig", "")
+    mime = request.headers.get("x-mime", "image/jpeg")
+    if not verify_auth(uid, exp, sig):
+        return {"ok": False, "error": "auth"}
+    raw = await request.body()
+    return _save_upload(uid, raw, mime)
 
 
 @vagent_router.get("/file/{name}")

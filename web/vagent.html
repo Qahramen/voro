@@ -846,6 +846,11 @@ async function syncFromServer(){
 }
 let CHATS=loadChats();
 let CHAT_ID=(CHATS[0]&&CHATS[0].id)||newId();
+// YOPISHQOQ VIDEO: biriktirilgan video URL'ni generatsiyagacha eslab turamiz (har suhbat alohida,
+// reload'ga chidamli). Har xabarda backend'ga qayta yuboriladi → agent videoni UNUTMAYDI.
+function pvKey(){ return "vg_pv_"+CHAT_ID; }
+function getPV(){ try{ return localStorage.getItem(pvKey())||""; }catch{ return ""; } }
+function setPV(u){ try{ if(u) localStorage.setItem(pvKey(),u); else localStorage.removeItem(pvKey()); }catch{} }
 function activeChat(){
   let c=CHATS.find(x=>x.id===CHAT_ID);
   if(!c){ c={id:CHAT_ID,title:"",ts:Date.now(),log:[]}; CHATS.unshift(c); }
@@ -982,24 +987,27 @@ fileInp.onchange=async()=>{
   for(const f of fileInp.files){
     if(attachments.length>=4)break;
     const isVid=(f.type||"").startsWith("video/");
-    const b64=await new Promise(res=>{const r=new FileReader();
-      r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(f);});
+    const objurl=URL.createObjectURL(f);   // TEZ preview — base64 o'qish yo'q (katta video sekinlashmaydi)
     const inner=isVid
-      ? `<video src="data:${f.type};base64,${b64}" muted playsinline></video><span class="att-play">▶</span>`
-      : `<img src="data:${f.type};base64,${b64}">`;
+      ? `<video src="${objurl}" muted playsinline></video><span class="att-play">▶</span>`
+      : `<img src="${objurl}">`;
     const chip=el(`<div class="att-chip loading${isVid?' vid':''}">${inner}<button class="x">${ic('x',11)}</button></div>`);
     attbar.appendChild(chip);attbar.classList.add("show");
     const entry={url:null,elm:chip};attachments.push(entry);
     chip.querySelector(".x").onclick=()=>{attachments=attachments.filter(a=>a!==entry);chip.remove();
       if(!attachments.length)attbar.classList.remove("show");};
     try{
-      const r=await fetch(`${API_BASE}/upload`,{method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({...AUTH,data_b64:b64,mime:f.type})});
+      // XOM binary yuklaymiz (base64 emas) → 33% kichik + tez. Auth header'da.
+      const r=await fetch(`${API_BASE}/upload-raw`,{method:"POST",
+        headers:{"X-Uid":AUTH.uid,"X-Exp":AUTH.exp,"X-Sig":AUTH.sig,"X-Mime":f.type||"application/octet-stream"},
+        body:f});
       const d=await r.json();
-      if(d.ok){entry.url=d.url;chip.classList.remove("loading");}
+      if(d.ok){
+        entry.url=d.url;chip.classList.remove("loading");
+        if(d.kind==="video") setPV(d.url);   // video yopishqoq bo'ladi (agent unutmaydi)
+      }
       else{chip.remove();attachments=attachments.filter(a=>a!==entry);
-           chat.appendChild(el(`<div class="err">Rasm yuklanmadi: ${esc(d.error||"")}</div>`));}
+           chat.appendChild(el(`<div class="err">Yuklanmadi: ${esc(d.error||"")}</div>`));}
     }catch{chip.remove();attachments=attachments.filter(a=>a!==entry);}
   }
   fileInp.value="";
@@ -1090,6 +1098,7 @@ async function stream(payload){
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({...AUTH,message:payload.message||"",
         attachments:payload.attachments||[],
+        pending_video:getPV(),           // yopishqoq video — agent suhbatdagi videoni unutmaydi
         confirm_token:payload.confirm_token||null,
         decline:!!payload.decline, chat_id:CHAT_ID})});
 
@@ -1147,6 +1156,7 @@ async function stream(payload){
       const row=progRows[d.label];if(row){row.remove();delete progRows[d.label];}
       renderResult(d);setBal(d.balance);
       logAppend({t:"result",kind:d.kind,url:d.url,label:d.label,price:d.price});
+      setPV("");   // video ishlatildi — yopishqoqlikni tozalaymiz
       localStorage.setItem("vg_since",String(Math.floor(Date.now()/1000)));
       tg?.HapticFeedback?.notificationOccurred("success");
     }
