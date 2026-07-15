@@ -1138,9 +1138,9 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
                 _p = str(j.get("prompt", ""))
                 if not any(w in _p.lower() for w in ("exact face", "same face", "identity", "same person", "facial features")):
                     j["prompt"] = _p.rstrip(". ") + (
-                        ". IMPORTANT: preserve the EXACT same face, facial features, skin tone and identity "
-                        "of the person from the reference image — it must clearly be the same person, "
-                        "do not alter or beautify the face.")
+                        ". IMPORTANT: preserve the EXACT same face, facial features, skin tone, gender and identity "
+                        "of the person from the reference image — it must clearly be the SAME person, "
+                        "do not alter or beautify the face, do not change their gender.")
         # DETERMINISTIK VIDEO: video biriktirilgan bo'lsa, video jobs'ga avtomatik
         # qo'shamiz (model unutmasin) + davomiylikni video uzunligiga tenglaymiz.
         if sess.pending_video:
