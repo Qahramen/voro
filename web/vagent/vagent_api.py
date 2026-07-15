@@ -574,15 +574,31 @@ def _transcode_h264(src: str, out: str) -> bool:
         return False
 
 
-def _start_bg_transcode(src: str, out: str):
-    """FONDA transcode: upload javobi DARROV qaytadi (tarmoq tezligicha), transcode
-    foydalanuvchi promptni yozayotganda ketadi → yuklash sezilarli tez his qilinadi."""
+def _remux_mp4(src: str, out: str) -> bool:
+    """h264 videoni QAYTA KODLAMAY toza standart mp4 ga o'tkazadi (-c copy + faststart, ~darrov).
+    Brauzerda siqilgan mp4 fragmented/duration-siz bo'lishi mumkin — Gemini rad etmasligi uchun."""
+    try:
+        import subprocess
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", src, "-c", "copy", "-movflags", "+faststart", out],
+            capture_output=True, timeout=120)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            return True
+        return _transcode_h264(src, out)   # -c copy ishlamasa — to'liq transcode
+    except Exception:
+        return False
+
+
+def _start_bg_transcode(src: str, out: str, remux: bool = False):
+    """FONDA: upload javobi DARROV qaytadi (tarmoq tezligicha), qayta kodlash/remux
+    foydalanuvchi promptni yozayotganda ketadi → yuklash sezilarli tez his qilinadi.
+    remux=True (allaqachon h264) → -c copy (tez); aks holda to'liq transcode."""
     ev = threading.Event()
     _TRANSCODE_EVENTS[out] = ev
 
     def work():
         try:
-            ok = _transcode_h264(src, out)
+            ok = _remux_mp4(src, out) if remux else _transcode_h264(src, out)
             if ok:
                 try:
                     os.remove(src)               # asl .mov o'chiriladi
@@ -1578,21 +1594,20 @@ def _save_upload(uid: str, raw: bytes, mime: str) -> dict:
                 pass
             return {"ok": False, "error": "Video 30 sekunddan uzun — qisqaroq yuklang"}
         codec = _probe_codec(path)
-        if codec == "h264" and ext in ("mp4", "m4v"):
-            return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "video", "duration": dur}
-        # iPhone .mov/HEVC → mp4 H.264 (Gemini video-edit shart qiladi), lekin FONDA:
-        # javob DARROV qaytadi, transcode user prompt yozayotganda ketadi.
+        # HAR video FONDA tayyorlanadi (javob darrov qaytadi):
+        #  - h264 (brauzerda siqilgan yoki tayyor) → tez -c copy remux (toza standart mp4)
+        #  - .mov/HEVC/boshqa → to'liq mp4 H.264 transcode (Gemini video-edit shart qiladi)
         final_path = (path.rsplit(".", 1)[0] if "." in path else path) + "_h264.mp4"
         final_name = os.path.basename(final_path)
         final_url = f"{PUBLIC_BASE}/vagent/file/{final_name}"
-        # vision kadrini HOZIR keshlaymiz (transcode'ni kutmasin — agent darrov "ko'radi")
+        # vision kadrini HOZIR keshlaymiz (fon ishini kutmasin — agent darrov "ko'radi")
         try:
             _fb, _fm = _extract_frame_b64(path)
             if _fb:
                 _FRAME_CACHE[final_url] = (_fb, _fm, dur)
         except Exception:
             pass
-        _start_bg_transcode(path, final_path)
+        _start_bg_transcode(path, final_path, remux=(codec == "h264"))
         return {"ok": True, "url": final_url, "kind": "video", "duration": dur}
     return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "image"}
 

@@ -998,6 +998,64 @@ document.addEventListener("click",(e)=>{
 
 // ===== RASM BIRIKTIRISH =====
 document.getElementById("attach").onclick=()=>fileInp.click();
+// iPhone .mov (HEVC, katta) ni yuklashdan OLDIN brauzerda 720p H.264 ga siqamiz.
+// Tarmoqqa 5-6x kam yuk → tez yuklanadi + serverda transcode kerak emas.
+// Qo'llab-quvvatlanmasa/xato bo'lsa null → asl fayl yuklanadi (xavfsiz fallback).
+async function compressVideo(file, onProgress){
+  let v=null, cv=null, srcUrl=null, di=null;
+  const cleanup=()=>{ try{ clearInterval(di); }catch(e){} try{ if(srcUrl) URL.revokeObjectURL(srcUrl); }catch(e){}
+    try{ v&&v.remove(); }catch(e){} try{ cv&&cv.remove(); }catch(e){} };
+  try{
+    if(!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+    let mime="video/mp4";
+    if(!MediaRecorder.isTypeSupported(mime)){
+      mime="video/webm;codecs=vp8";
+      if(!MediaRecorder.isTypeSupported(mime)){ mime="video/webm"; if(!MediaRecorder.isTypeSupported(mime)) return null; }
+    }
+    srcUrl=URL.createObjectURL(file);
+    v=document.createElement("video");
+    v.src=srcUrl; v.muted=true; v.playsInline=true; v.preload="auto";
+    // MUHIM: drawImage/captureStream ishlashi uchun element DOM'da bo'lishi shart (ekrandan tashqarida)
+    v.style.cssText="position:fixed;left:-9999px;top:0;width:16px;height:16px;opacity:0;pointer-events:none";
+    document.body.appendChild(v);
+    await new Promise((res,rej)=>{ v.onloadedmetadata=()=>res(); v.onerror=()=>rej(); setTimeout(rej,15000); });
+    const dur=v.duration||0, W=v.videoWidth, H=v.videoHeight;
+    if(!W||!H){ cleanup(); return null; }
+    const MAX=1280, scale=Math.min(1, MAX/Math.max(W,H));
+    const cw=Math.max(2,Math.round(W*scale/2)*2), ch=Math.max(2,Math.round(H*scale/2)*2);
+    cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+    cv.style.cssText="position:fixed;left:-9999px;top:0;pointer-events:none";
+    document.body.appendChild(cv);
+    const ctx=cv.getContext("2d",{alpha:false});
+    const stream=cv.captureStream(30);
+    try{ const as=(v.captureStream&&v.captureStream())||(v.mozCaptureStream&&v.mozCaptureStream());
+         const at=as&&as.getAudioTracks&&as.getAudioTracks()[0]; if(at) stream.addTrack(at); }catch(e){}
+    const rec=new MediaRecorder(stream,{mimeType:mime, videoBitsPerSecond:3500000});
+    const chunks=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+    const stopped=new Promise(res=>{ rec.onstop=res; });
+    rec.start(500);   // timeslice — chunk'lar davriy chiqadi
+    await v.play().catch(()=>{});
+    // setInterval (rAF EMAS: rAF tab ko'rinmasa to'xtaydi → kadr chizilmay qoladi)
+    di=setInterval(()=>{ if(!v.paused&&!v.ended){ ctx.drawImage(v,0,0,cw,ch);
+      if(onProgress&&isFinite(dur)&&dur>0) onProgress(Math.min(99,Math.round(v.currentTime/dur*100))); } }, 33);
+    await new Promise(res=>{ v.onended=()=>res(); setTimeout(res,(isFinite(dur)&&dur>0?dur*1000:60000)+8000); });
+    clearInterval(di); di=null;
+    try{ rec.stop(); }catch(e){}
+    await stopped;
+    if(!chunks.length){ cleanup(); return null; }
+    const blob=new Blob(chunks,{type:mime.split(";")[0]});
+    if(blob.size<1024 || blob.size>=file.size){ cleanup(); return null; }   // foyda yo'q yoki buzuq
+    // TEKSHIRUV: natija o'qiladimi (o'lcham bilan — dur Infinity bo'lishi normal)
+    const ok=await new Promise(res=>{ const t=document.createElement("video"); const u=URL.createObjectURL(blob);
+      t.onloadedmetadata=()=>{ const good=(t.videoWidth>0&&t.videoHeight>0); URL.revokeObjectURL(u); res(good); };
+      t.onerror=()=>{ URL.revokeObjectURL(u); res(false); }; t.src=u; setTimeout(()=>res(false),8000); });
+    cleanup();
+    if(!ok) return null;
+    if(onProgress) onProgress(100);
+    return blob;
+  }catch(e){ cleanup(); return null; }
+}
+
 // BITTA fayl (input/paste/drag ikkalasi ham shu funksiyani ishlatadi)
 async function addAttachment(f){
   if(!f || attachments.length>=4) return;
@@ -1014,9 +1072,17 @@ async function addAttachment(f){
     revokeObj(objurl);   // olib tashlanganda blobni darrov bo'shatamiz
     if(!attachments.length)attbar.classList.remove("show");};
   try{
+    let up=f;
+    // KATTA video (iPhone .mov) — yuborishdan oldin brauzerda siqamiz (tez yuklanadi)
+    if(isVid && f.size > 6*1024*1024){
+      const ps=chip.querySelector(".att-play");
+      const small=await compressVideo(f,(p)=>{ if(ps) ps.textContent=p+"%"; });
+      if(ps) ps.textContent="▶";
+      if(small) up=small;   // siqildi — kichik faylni yuboramiz; bo'lmasa asl fayl (fallback)
+    }
     const r=await fetch(`${API_BASE}/upload-raw`,{method:"POST",
-      headers:{"X-Uid":AUTH.uid,"X-Exp":AUTH.exp,"X-Sig":AUTH.sig,"X-Mime":f.type||"application/octet-stream"},
-      body:f});
+      headers:{"X-Uid":AUTH.uid,"X-Exp":AUTH.exp,"X-Sig":AUTH.sig,"X-Mime":(up.type||f.type||"application/octet-stream")},
+      body:up});
     const d=await r.json();
     if(d.ok){
       entry.url=d.url;chip.classList.remove("loading");
