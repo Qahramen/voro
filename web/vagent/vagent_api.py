@@ -995,7 +995,8 @@ Oxirgi ishlar:
 # RASM MODELINI TANLASH (muhim qoida)
 - MATN aralashgan rasm (storyboard/kadrlarda yozuv, poster, banner, taklifnoma, logo bilan matn, reklama matnли) → HAR DOIM "gpt-image-2" (matn/logoni aniq chizadi; nano-banana matnни buzadi).
 - STORYBOARD (bir nechta kadr, har kadrда izoh/yozuv) → "gpt-image-2".
-- YUZ/QIYOFA referensi bilan aniqlik muhim bo'lsa (odamni professional joylashtirish, "meni ... qil") → "gpt-image-2" (image-to-image, referens bilan yuzni yaxshi saqlaydi).
+- MUHIM: foydalanuvchi RASM biriktirsa (referens) va uni asos qilib rasm yasalса — bu HAR DOIM "gpt-image-2" da bajariladi (nano-banana referens/edit'ni yaxshi bajarmaydi; gpt yuzni aniq saqlaydi). Ya'ni referensли rasm ishlar uchun model = gpt-image-2 (narx 5 tanga), promptда yuzni saqlashni ANIQ yoz ("same exact face and identity from the reference").
+- YUZ/QIYOFA referensi bilan aniqlik muhim bo'lsa (odamni professional joylashtirish, "meni ... qil") → "gpt-image-2".
 - Foydalanuvchi "yuz o'xshamadi / meniga o'xshamaydi / qiyofa boshqacha" desa → o'sha referens rasm bilan "gpt-image-2" da qayta yasa (is_iteration=true), nano-banana emas.
 - Oddiy, matnsiz, tez sketch/g'oya/qoralama → "nano-banana-2" (arzon, tez).
 Narxni faqat estimate_cost bilan hisobla — yoddan aytma."""
@@ -1127,6 +1128,17 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
                 cur = list(j.get("reference_urls") or [])
                 merged = list(dict.fromkeys(cur + sess.pending_refs))   # dedup, tartib saqlanadi
                 j["reference_urls"] = merged
+        # DETERMINISTIK YUZ SAQLASH: referens rasmli IMAGE ishlar → gpt-image-2 (nano-banana/edit
+        # ishlamaydi + gpt referens yuzni juda yaxshi saqlaydi) + promptga identity ko'rsatmasi.
+        for j in jobs:
+            if j.get("kind", "image") == "image" and j.get("reference_urls"):
+                j["model"] = "gpt-image-2"
+                _p = str(j.get("prompt", ""))
+                if not any(w in _p.lower() for w in ("exact face", "same face", "identity", "same person", "facial features")):
+                    j["prompt"] = _p.rstrip(". ") + (
+                        ". IMPORTANT: preserve the EXACT same face, facial features, skin tone and identity "
+                        "of the person from the reference image — it must clearly be the same person, "
+                        "do not alter or beautify the face.")
         # DETERMINISTIK VIDEO: video biriktirilgan bo'lsa, video jobs'ga avtomatik
         # qo'shamiz (model unutmasin) + davomiylikni video uzunligiga tenglaymiz.
         if sess.pending_video:
