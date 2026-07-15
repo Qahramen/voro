@@ -769,6 +769,11 @@ const fileInp = document.getElementById("file");
 const micBtn = document.getElementById("mic");
 let busy = false;
 let attachments = [];
+// Preview blob-URL'lari: RAM'da qolib ketmasin (video 27MB — Safari "significant memory" bilan reload qilardi)
+let OBJURLS = [];
+function revokeObj(u){ try{ URL.revokeObjectURL(u); }catch(e){} OBJURLS=OBJURLS.filter(x=>x!==u); }
+function revokeAllObj(){ OBJURLS.forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(e){} }); OBJURLS=[]; }
+window.addEventListener("pagehide", revokeAllObj);
 const progRows = {};
 
 function el(h){const d=document.createElement("div");d.innerHTML=h.trim();return d.firstChild;}
@@ -887,6 +892,7 @@ function renderLog(log){
 }
 function clearChatUI(){
   [...chat.querySelectorAll(".msg,.result-card,.err,.status-chip,.prog,.opts,.confirm-card,.typing")].forEach(n=>n.remove());
+  revokeAllObj();   // suhbat almashganda eski preview bloblarini bo'shatamiz (xotira)
 }
 function showGreeting(){
   if(document.getElementById("empty")) return;
@@ -997,13 +1003,15 @@ async function addAttachment(f){
   if(!f || attachments.length>=4) return;
   const isVid=(f.type||"").startsWith("video/");
   const objurl=URL.createObjectURL(f);   // TEZ preview — base64 o'qish yo'q
+  OBJURLS.push(objurl);                   // xotira: keyin bo'shatamiz (blob RAM'da qolib ketmasin)
   const inner=isVid
     ? `<video src="${objurl}" muted playsinline></video><span class="att-play">▶</span>`
     : `<img src="${objurl}">`;
   const chip=el(`<div class="att-chip loading${isVid?' vid':''}">${inner}<button class="x">${ic('x',11)}</button></div>`);
   attbar.appendChild(chip);attbar.classList.add("show");
-  const entry={url:null,elm:chip};attachments.push(entry);
+  const entry={url:null,elm:chip,objurl};attachments.push(entry);
   chip.querySelector(".x").onclick=()=>{attachments=attachments.filter(a=>a!==entry);chip.remove();
+    revokeObj(objurl);   // olib tashlanganda blobni darrov bo'shatamiz
     if(!attachments.length)attbar.classList.remove("show");};
   try{
     const r=await fetch(`${API_BASE}/upload-raw`,{method:"POST",
@@ -1096,8 +1104,11 @@ async function sendMsg(extra){
     let h=`<div class="msg user">${esc(text)}`;
     attachments.forEach(a=>{
       const im=a.elm.querySelector("img"), vd=a.elm.querySelector("video");
-      if(vd)h+=`<video class="att" src="${vd.src}" muted playsinline controls></video>`;
-      else if(im)h+=`<img class="att" src="${im.src}">`;
+      if(vd)h+=`<video class="att" src="${vd.src}" muted playsinline controls></video>`;  // video: lokal blob (switch'da bo'shatiladi)
+      else if(im){
+        h+=`<img class="att" src="${a.url||im.src}">`;   // rasm: server URL — blob shart emas
+        if(a.url&&a.objurl) revokeObj(a.objurl);          // rasm blobini DARROV bo'shatamiz (xotira)
+      }
     });
     h+="</div>";
     chat.appendChild(el(h));
