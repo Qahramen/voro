@@ -342,7 +342,7 @@ def rebuild_messages(user_id: str, chat_id: str) -> list:
     if not log:
         return []
     msgs: list = []
-    for e in log[-24:]:
+    for e in log[-48:]:                    # butun suhbat konteksti (user yopmaguncha eslab qoladi)
         t = e.get("t")
         if t == "user" and e.get("text"):
             role, text = "user", str(e["text"])
@@ -540,6 +540,37 @@ def _video_frame_cached(vurl: str):
         if len(_FRAME_CACHE) > 200:
             _FRAME_CACHE.pop(next(iter(_FRAME_CACHE)))
     return res
+
+
+def _normalize_video(path: str) -> str:
+    """iPhone .mov/HEVC → mp4 H.264. Gemini video-edit .mov'ni rad etadi:
+    'Request parameters are invalid' (error_code 1010002). Shu sabab HAR video normallashtiriladi."""
+    try:
+        import subprocess
+        pr = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name", "-of", "default=nk=1:nw=1", path],
+            capture_output=True, text=True, timeout=20)
+        codec = (pr.stdout or "").strip().lower()
+        ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+        if codec == "h264" and ext in ("mp4", "m4v"):
+            return path                       # allaqachon mos — qayta kodlash shart emas
+        out = (path.rsplit(".", 1)[0] if "." in path else path) + "_h264.mp4"
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", path,
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+             "-vf", "scale='min(1920,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+             "-r", "30", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out],
+            capture_output=True, timeout=240)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            return out
+    except Exception:
+        pass
+    return path
 
 
 async def _atlas_upload_video(url):
@@ -1435,8 +1466,8 @@ async def vagent_chat(body: ChatIn):
         sess.messages.append({"role": "user", "content": _content})
     else:
         sess.messages.append({"role": "user", "content": user_text})
-    if len(sess.messages) > 30:
-        sess.messages = sess.messages[-30:]
+    if len(sess.messages) > 48:            # suhbat davomida to'liq xotira (chalkashlik bo'lmasin)
+        sess.messages = sess.messages[-48:]
         while sess.messages and (
             sess.messages[0]["role"] != "user" or
             (isinstance(sess.messages[0].get("content"), list) and
@@ -1500,14 +1531,19 @@ def _save_upload(uid: str, raw: bytes, mime: str) -> dict:
     with open(path, "wb") as f:
         f.write(raw)
     track(uid, "upload_video" if is_video else "upload")
-    resp = {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "video" if is_video else "image"}
     if is_video:
+        # iPhone .mov/HEVC Gemini video-edit'da FAILED beradi → mp4 H.264'ga normallashtiramiz
+        path = _normalize_video(path)
+        name = os.path.basename(path)
         dur = _video_duration(path)
         if dur > 30:
-            os.remove(path)
+            try:
+                os.remove(path)
+            except Exception:
+                pass
             return {"ok": False, "error": "Video 30 sekunddan uzun — qisqaroq yuklang"}
-        resp["duration"] = dur
-    return resp
+        return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "video", "duration": dur}
+    return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "image"}
 
 
 @vagent_router.post("/upload")

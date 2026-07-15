@@ -508,6 +508,9 @@ lucide-react/dist/esm/lucide-react.js:
         if(tpl) b.setAttribute("style", tpl.getAttribute("style")||"");
         b.innerHTML=ICON16+'<span class="hide-xs">Vagent</span>';
         b.onclick=function(e){ e.preventDefault(); e.stopPropagation(); openVagent(); };
+        // NIYAT signali: tugmaga tegilsa/hover bo'lsa iframe'ni oldindan qizdiramiz (tez ochilsin)
+        b.addEventListener("pointerenter", prefetch, {passive:true});
+        b.addEventListener("touchstart", prefetch, {passive:true});
         nav.appendChild(b);
       }
       fixHome();
@@ -553,8 +556,8 @@ lucide-react/dist/esm/lucide-react.js:
     try{
       var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
         +'<circle cx="50" cy="50" r="50" fill="#000"/>'
-        +'<path d="M27 33 L50 71 L73 33" fill="none" stroke="#fff" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>'
-        +'<path d="M45 40 L58 61" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>'
+        +'<path d="M23 27 L50 83 L77 27" fill="none" stroke="#fff" stroke-width="8.6" stroke-linejoin="round" stroke-linecap="round"/>'
+        +'<path d="M44 27 L60 60" fill="none" stroke="#fff" stroke-width="7.9" stroke-linecap="round"/>'
         +'</svg>';
       var href="data:image/svg+xml,"+encodeURIComponent(svg);
       [].slice.call(document.querySelectorAll('link[rel~="icon"],link[rel="shortcut icon"],link[rel="apple-touch-icon"]')).forEach(function(l){ l.parentNode&&l.parentNode.removeChild(l); });
@@ -574,8 +577,9 @@ lucide-react/dist/esm/lucide-react.js:
 
   // Vagent'da turib REFRESH qilinsa — Vagent'da qolamiz (main'ga qaytmaydi)
   if(location.hash==="#vagent"){ setTimeout(openVagent, 250); }
-  // ochishni tez qilish uchun oldindan link
-  setTimeout(prefetch, 1200);
+  // ochishni TEZ qilish: iframe'ni bo'sh vaqtda oldindan qizdiramiz (asosiy sahifa renderiga xalaqit bermay)
+  if(window.requestIdleCallback){ requestIdleCallback(prefetch, {timeout:1500}); }
+  else { setTimeout(prefetch, 500); }
 })();
 </script>
 </body>
