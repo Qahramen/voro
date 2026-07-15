@@ -542,35 +542,71 @@ def _video_frame_cached(vurl: str):
     return res
 
 
-def _normalize_video(path: str) -> str:
-    """iPhone .mov/HEVC → mp4 H.264. Gemini video-edit .mov'ni rad etadi:
-    'Request parameters are invalid' (error_code 1010002). Shu sabab HAR video normallashtiriladi."""
+import threading
+_TRANSCODE_EVENTS: dict = {}   # final_path -> threading.Event (transcode tugaganda set bo'ladi)
+
+
+def _probe_codec(path: str) -> str:
     try:
         import subprocess
         pr = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=codec_name", "-of", "default=nk=1:nw=1", path],
             capture_output=True, text=True, timeout=20)
-        codec = (pr.stdout or "").strip().lower()
-        ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-        if codec == "h264" and ext in ("mp4", "m4v"):
-            return path                       # allaqachon mos — qayta kodlash shart emas
-        out = (path.rsplit(".", 1)[0] if "." in path else path) + "_h264.mp4"
+        return (pr.stdout or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _transcode_h264(src: str, out: str) -> bool:
+    """src → out (mp4 H.264). Fonda ishlagani uchun veryfast (kichik fayl+sifat; encode vaqti yashirin).
+    Gemini video-edit .mov/HEVC'ni rad etadi (1010002)."""
+    try:
+        import subprocess
         subprocess.run(
-            ["ffmpeg", "-v", "error", "-y", "-i", path,
+            ["ffmpeg", "-v", "error", "-y", "-i", src,
              "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
              "-vf", "scale='min(1920,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
              "-r", "30", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out],
             capture_output=True, timeout=240)
-        if os.path.exists(out) and os.path.getsize(out) > 0:
-            try:
-                os.remove(path)
-            except Exception:
-                pass
-            return out
+        return os.path.exists(out) and os.path.getsize(out) > 0
     except Exception:
-        pass
-    return path
+        return False
+
+
+def _start_bg_transcode(src: str, out: str):
+    """FONDA transcode: upload javobi DARROV qaytadi (tarmoq tezligicha), transcode
+    foydalanuvchi promptni yozayotganda ketadi → yuklash sezilarli tez his qilinadi."""
+    ev = threading.Event()
+    _TRANSCODE_EVENTS[out] = ev
+
+    def work():
+        try:
+            ok = _transcode_h264(src, out)
+            if ok:
+                try:
+                    os.remove(src)               # asl .mov o'chiriladi
+                except Exception:
+                    pass
+            elif not os.path.exists(out):
+                try:
+                    import shutil
+                    shutil.copy(src, out)        # zaxira: transcode ishlamasa ham URL 404 bermasin
+                except Exception:
+                    pass
+        finally:
+            ev.set()
+            if len(_TRANSCODE_EVENTS) > 300:
+                _TRANSCODE_EVENTS.pop(next(iter(_TRANSCODE_EVENTS)), None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+
+def _wait_transcode(final_path: str, timeout: int = 200):
+    """Generatsiya paytida chaqiriladi: fonda transcode hali tugamagan bo'lsa — kutamiz."""
+    ev = _TRANSCODE_EVENTS.get(final_path)
+    if ev:
+        ev.wait(timeout)
 
 
 async def _atlas_upload_video(url):
@@ -578,6 +614,8 @@ async def _atlas_upload_video(url):
     try:
         name = url.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
         path = os.path.join(UPLOADS_DIR, name)
+        # fonda transcode hali ketayotgan bo'lsa — tugashini kutamiz (event loop'ni bloklamay)
+        await asyncio.get_event_loop().run_in_executor(None, _wait_transcode, path)
         if not os.path.exists(path):
             return url
         ext = name.rsplit(".", 1)[-1].lower()
@@ -1532,9 +1570,6 @@ def _save_upload(uid: str, raw: bytes, mime: str) -> dict:
         f.write(raw)
     track(uid, "upload_video" if is_video else "upload")
     if is_video:
-        # iPhone .mov/HEVC Gemini video-edit'da FAILED beradi → mp4 H.264'ga normallashtiramiz
-        path = _normalize_video(path)
-        name = os.path.basename(path)
         dur = _video_duration(path)
         if dur > 30:
             try:
@@ -1542,7 +1577,23 @@ def _save_upload(uid: str, raw: bytes, mime: str) -> dict:
             except Exception:
                 pass
             return {"ok": False, "error": "Video 30 sekunddan uzun — qisqaroq yuklang"}
-        return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "video", "duration": dur}
+        codec = _probe_codec(path)
+        if codec == "h264" and ext in ("mp4", "m4v"):
+            return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "video", "duration": dur}
+        # iPhone .mov/HEVC → mp4 H.264 (Gemini video-edit shart qiladi), lekin FONDA:
+        # javob DARROV qaytadi, transcode user prompt yozayotganda ketadi.
+        final_path = (path.rsplit(".", 1)[0] if "." in path else path) + "_h264.mp4"
+        final_name = os.path.basename(final_path)
+        final_url = f"{PUBLIC_BASE}/vagent/file/{final_name}"
+        # vision kadrini HOZIR keshlaymiz (transcode'ni kutmasin — agent darrov "ko'radi")
+        try:
+            _fb, _fm = _extract_frame_b64(path)
+            if _fb:
+                _FRAME_CACHE[final_url] = (_fb, _fm, dur)
+        except Exception:
+            pass
+        _start_bg_transcode(path, final_path)
+        return {"ok": True, "url": final_url, "kind": "video", "duration": dur}
     return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "image"}
 
 
