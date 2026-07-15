@@ -611,9 +611,9 @@ window.addEventListener("message",function(e){
   if(e&&e.data&&e.data.t==="vgpadb") applyPadb(e.data.v);
 });
 const I18N = {
-  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans", thinking:"O'ylayapman", new_chat:"Yangi", history:"Suhbatlar", no_chats:"Hali suhbat yo'q", uploading:"Rasm yuklanmoqda…", untitled:"Yangi suhbat", up_fail:"Yuklanmadi", voice_fail:"Ovoz tushunilmadi", voice_blocked:"Bu qurilmada ovoz yozish cheklangan — g'oyangni yozib yuboraver.", conn_lost:"Aloqa uzildi — natijalar yo'qolmaydi, ilova qayta ochilganda keladi." },
-  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс", thinking:"Думаю", new_chat:"Новый", history:"Диалоги", no_chats:"Пока нет диалогов", uploading:"Загрузка фото…", untitled:"Новый диалог", up_fail:"Не загружено", voice_fail:"Голос не распознан", voice_blocked:"Запись голоса на этом устройстве ограничена — напиши идею текстом.", conn_lost:"Связь прервалась — результаты не потеряются, придут при повторном открытии." },
-  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance", thinking:"Thinking", new_chat:"New", history:"Chats", no_chats:"No chats yet", uploading:"Uploading photo…", untitled:"New chat", up_fail:"Upload failed", voice_fail:"Voice not recognized", voice_blocked:"Voice recording is restricted on this device — just type your idea.", conn_lost:"Connection lost — results aren't lost, they'll arrive when you reopen." },
+  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans", thinking:"O'ylayapman", new_chat:"Yangi", history:"Suhbatlar", no_chats:"Hali suhbat yo'q", uploading:"Rasm yuklanmoqda…", del:"O'chirish", home_tip:"voro.uz — bosh sahifa", untitled:"Yangi suhbat", up_fail:"Yuklanmadi", voice_fail:"Ovoz tushunilmadi", voice_blocked:"Bu qurilmada ovoz yozish cheklangan — g'oyangni yozib yuboraver.", conn_lost:"Aloqa uzildi — natijalar yo'qolmaydi, ilova qayta ochilganda keladi." },
+  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс", thinking:"Думаю", new_chat:"Новый", history:"Диалоги", no_chats:"Пока нет диалогов", uploading:"Загрузка фото…", del:"Удалить", home_tip:"voro.uz — главная", untitled:"Новый диалог", up_fail:"Не загружено", voice_fail:"Голос не распознан", voice_blocked:"Запись голоса на этом устройстве ограничена — напиши идею текстом.", conn_lost:"Связь прервалась — результаты не потеряются, придут при повторном открытии." },
+  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance", thinking:"Thinking", new_chat:"New", history:"Chats", no_chats:"No chats yet", uploading:"Uploading photo…", del:"Delete", home_tip:"voro.uz — home", untitled:"New chat", up_fail:"Upload failed", voice_fail:"Voice not recognized", voice_blocked:"Voice recording is restricted on this device — just type your idea.", conn_lost:"Connection lost — results aren't lost, they'll arrive when you reopen." },
 };
 let VT = I18N[AUTH.lang] || I18N.uz;
 function applyLang(){ try{
@@ -626,6 +626,7 @@ function applyLang(){ try{
   if(q("#mic")) q("#mic").title=VT.mic;
   if(q("#newChatBtn")) q("#newChatBtn").title=VT.new_chat;
   if(q("#histToggle")) q("#histToggle").title=VT.history;
+  if(q("#hdHome")) q("#hdHome").title=VT.home_tip||"voro.uz";
   document.documentElement.lang=AUTH.lang||"uz";
 }catch(e){} }
 applyLang();
@@ -963,7 +964,7 @@ function renderHist(){
   const items=CHATS.filter(c=>c.log.length).map(c=>
     `<div class="hist-item${c.id===CHAT_ID?' cur':''}" data-id="${c.id}">
        <span class="hi-title">${esc(c.title||VT.untitled)}</span>
-       <button class="hi-del" data-del="${c.id}" title="O'chirish">${ic('x',13)}</button>
+       <button class="hi-del" data-del="${c.id}" title="${esc(VT.del||'')}">${ic('x',13)}</button>
      </div>`).join("");
   p.innerHTML=`<div class="hist-hd">${VT.history||"Suhbatlar"}</div>`+(items||`<div class="hist-empty">${VT.no_chats||"Hali suhbat yo'q"}</div>`);
   p.querySelectorAll(".hist-item").forEach(it=>{
@@ -1143,7 +1144,7 @@ async function addAttachment(f){
       if(small) up=small;   // siqildi — kichik faylni yuboramiz; bo'lmasa asl fayl (fallback)
     }
     const r=await fetch(`${API_BASE}/upload-raw`,{method:"POST",
-      headers:{"X-Uid":AUTH.uid,"X-Exp":AUTH.exp,"X-Sig":AUTH.sig,"X-Mime":(up.type||f.type||"application/octet-stream")},
+      headers:{"X-Uid":AUTH.uid,"X-Exp":AUTH.exp,"X-Sig":AUTH.sig,"X-Lang":AUTH.lang,"X-Mime":(up.type||f.type||"application/octet-stream")},
       body:up});
     const d=await r.json();
     if(d.ok){

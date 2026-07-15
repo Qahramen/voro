@@ -879,9 +879,9 @@ TOOLS = [
 # ============================================================
 
 _LANG_RULE = {
-    "uz": "Foydalanuvchi QAYSI TILDA yozsa — HAR safar o'sha tilda javob ber (o'zbekcha lotin / ruscha / inglizcha). Til aniq bo'lmasa: o'zbekcha (lotin)",
-    "ru": "Отвечай на ТОМ ЖЕ языке, на котором пишет пользователь в КАЖДОМ сообщении (узбекский-латиница / русский / английский). Если язык неясен — на русском",
-    "en": "Reply in the SAME language the user writes in, per message (Uzbek-latin / Russian / English). If unclear — in English",
+    "uz": "Foydalanuvchi QAYSI TILDA yozsa — HAR safar o'sha tilda javob ber (o'zbekcha lotin / ruscha / inglizcha). Til aniq bo'lmasa: o'zbekcha (lotin). MUHIM: tillarni ARALASHTIRMA — javobingdagi HAR bir so'z (shu jumladan present_options TUGMA yozuvlari va tasdiq matni) BITTA tilda bo'lsin, boshqa tildan bitta ham so'z qo'shma.",
+    "ru": "Отвечай на ТОМ ЖЕ языке, на котором пишет пользователь в КАЖДОМ сообщении (узбекский-латиница / русский / английский). Если язык неясен — на русском. ВАЖНО: НЕ смешивай языки — КАЖДОЕ слово в ответе (включая надписи на кнопках present_options и текст подтверждения) на ОДНОМ языке, ни одного слова из другого языка.",
+    "en": "Reply in the SAME language the user writes in, per message (Uzbek-latin / Russian / English). If unclear — in English. IMPORTANT: NEVER mix languages — every word in your reply (including present_options BUTTON labels and confirmation text) must be in ONE single language, not a single word from another language.",
 }
 
 
@@ -1031,7 +1031,7 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
         track(uid, "gen_fail", {"price": price, "model": j["model"],
                                 "error": str(last_err)[:100], "attempts": max_attempts})
         return {"label": label,
-                "error": f"Muvaffaqiyatsiz: {last_err}. {price} tangacha qaytarildi."}
+                "error": _t(_lang, "failed_refunded", err=_localize_err(last_err, _lang), price=price)}
 
     track(uid, "gen_ok", {"price": price, "model": used_model, "kind": j["kind"]})
     entry = {"label": label, "model": j["model"], "price": price,
@@ -1156,9 +1156,9 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
 
         total = sum(p for _, p in priced)
         if not deduct_credits(uid, total):
-            return {"error": f"Balans yetarli emas ({get_balance(uid)} bor, {total} kerak)."}
+            return {"error": _t(sess.lang, "balance_low", have=get_balance(uid), need=total)}
 
-        await emit("status", {"text": f"⚙️ {len(priced)} ta ish parallel boshlandi ({total} 🪙)"})
+        await emit("status", {"text": _t(sess.lang, "jobs_started", n=len(priced), total=total)})
         sess.active_jobs += len(priced)
         try:
             results = await asyncio.gather(
@@ -1328,7 +1328,7 @@ async def claude_stream_turn(sess: Session, emit) -> None:
         if waiting_user:
             return
 
-    await emit("error", {"text": "Juda ko'p qadam — so'rovni soddalashtiring."})
+    await emit("error", {"text": _t(getattr(sess, "lang", "uz"), "too_many_steps")})
 
 
 # ============================================================
@@ -1336,6 +1336,82 @@ async def claude_stream_turn(sess: Session, emit) -> None:
 #   Foydalanuvchi "Ha" tugmasini bosgach, generatsiya modelning qayta
 #   chaqiruviga bog'liq bo'lmasin — pending jobs to'g'ridan ishga tushadi.
 # ============================================================
+# TIL: foydalanuvchiga ko'rinadigan HAR bir matn tanlangan tilda (aralashuv bo'lmasin)
+_UI = {
+    "jobs_started": {"uz": "⚙️ {n} ta ish boshlandi ({total} 🪙)",
+                     "ru": "⚙️ Запущено задач: {n} ({total} 🪙)",
+                     "en": "⚙️ {n} job(s) started ({total} 🪙)"},
+    "too_many_steps": {"uz": "So'rov juda murakkab — biroz soddalashtiring.",
+                       "ru": "Запрос слишком сложный — упростите немного.",
+                       "en": "The request is too complex — please simplify it."},
+    "auth_error": {"uz": "Avtorizatsiya xatosi. Ilovani qayta oching.",
+                   "ru": "Ошибка авторизации. Откройте приложение заново.",
+                   "en": "Authorization error. Please reopen the app."},
+    "rate_limit": {"uz": "Juda tez yozayapsiz 🙂 Bir daqiqadan keyin davom etamiz.",
+                   "ru": "Слишком быстро 🙂 Продолжим через минуту.",
+                   "en": "You're typing too fast 🙂 Let's continue in a minute."},
+    "internal_error": {"uz": "Ichki xato yuz berdi. Qayta urinib ko'ring.",
+                       "ru": "Произошла внутренняя ошибка. Попробуйте снова.",
+                       "en": "An internal error occurred. Please try again."},
+    "confirm_yes": {"uz": "✅ Ha, roziman, boshla!",
+                    "ru": "✅ Да, согласен, начинай!",
+                    "en": "✅ Yes, go ahead!"},
+    "decline_no": {"uz": "❌ Yo'q, hozircha kerak emas.",
+                   "ru": "❌ Нет, пока не нужно.",
+                   "en": "❌ No, not right now."},
+    "balance_low": {"uz": "Balans yetarli emas ({have} bor, {need} kerak).",
+                    "ru": "Недостаточно баланса (есть {have}, нужно {need}).",
+                    "en": "Not enough balance (have {have}, need {need})."},
+    "failed_refunded": {"uz": "Muvaffaqiyatsiz: {err}. {price} 🪙 qaytarildi.",
+                        "ru": "Не удалось: {err}. {price} 🪙 возвращено.",
+                        "en": "Failed: {err}. {price} 🪙 refunded."},
+    "job_fail": {"uz": "⚠️ {label}: {err}",
+                 "ru": "⚠️ {label}: {err}",
+                 "en": "⚠️ {label}: {err}"},
+    "job_label": {"uz": "Ish", "ru": "Задача", "en": "Job"},
+    "up_empty": {"uz": "Bo'sh fayl.", "ru": "Пустой файл.", "en": "Empty file."},
+    "up_toobig": {"uz": "Fayl {limit}MB dan katta.",
+                  "ru": "Файл больше {limit}МБ.",
+                  "en": "File is larger than {limit}MB."},
+    "up_toolong": {"uz": "Video 30 sekunddan uzun — qisqaroq yuklang.",
+                   "ru": "Видео длиннее 30 секунд — загрузите короче.",
+                   "en": "Video is longer than 30 seconds — upload a shorter one."},
+}
+
+
+def _t(lang: str, key: str, **kw) -> str:
+    lang = lang if lang in ("uz", "ru", "en") else "uz"
+    s = (_UI.get(key, {}) or {}).get(lang) or (_UI.get(key, {}) or {}).get("uz") or key
+    try:
+        return s.format(**kw) if kw else s
+    except Exception:
+        return s
+
+
+def _localize_err(err, lang: str) -> str:
+    """Ichki/Atlas xatolarini tanlangan tilга tarjima (raw boshqa-til matn ko'rinmasin)."""
+    lang = lang if lang in ("uz", "ru", "en") else "uz"
+    e = str(err or "").lower()
+    tbl = {
+        "param": {"uz": "format/parametr xatosi", "ru": "ошибка формата/параметров", "en": "format/parameter error"},
+        "empty": {"uz": "natija bo'sh qaytdi", "ru": "пустой результат", "en": "empty result"},
+        "timeout": {"uz": "vaqt tugadi", "ru": "истекло время ожидания", "en": "timed out"},
+        "nsfw": {"uz": "kontent qoidalarga mos emas", "ru": "контент не соответствует правилам", "en": "content not allowed"},
+        "unknown": {"uz": "noma'lum xato", "ru": "неизвестная ошибка", "en": "unknown error"},
+    }
+    if "invalid" in e or "parameter" in e or "parametr" in e:
+        key = "param"
+    elif "empty" in e or "bo'sh" in e or "bo‘sh" in e or "bosh qaytdi" in e:
+        key = "empty"
+    elif "timeout" in e or "vaqt tugadi" in e or "истек" in e:
+        key = "timeout"
+    elif "nsfw" in e or "content" in e or "bloklandi" in e:
+        key = "nsfw"
+    else:
+        key = "unknown"
+    return tbl[key][lang]
+
+
 _GEN_DONE = {
     "uz": "✅ Tayyor! {ok}/{n} ish bajarildi. Yana o'zgartiramizmi yoki yangi ish boshlaymizmi?",
     "ru": "✅ Готово! Выполнено {ok}/{n}. Изменим или начнём новую работу?",
@@ -1393,8 +1469,9 @@ async def run_confirmed_generation(sess: "Session", emit):
     # Har MUVAFFAQIYATSIZ ish uchun sababni OCHIQ ko'rsat (avval yashirilardi)
     for r in results:
         if r.get("status") != "ok":
-            await emit("error", {"text": f"⚠️ {r.get('label', 'Ish')}: "
-                                         f"{r.get('error') or 'nomaʼlum xato'}"})
+            await emit("error", {"text": _t(lang, "job_fail",
+                                            label=r.get("label") or _t(lang, "job_label"),
+                                            err=_localize_err(r.get("error"), lang))})
     done_txt = _GEN_DONE[lang].format(ok=ok, n=len(results)) if ok else _GEN_ALLFAIL[lang]
     # Suhbat izchilligi: assistant turn sifatida TOZA matn qo'shamiz.
     # MUHIM: xom JSON/URL QO'SHMAYMIZ — aks holda model keyingi javobda uni
@@ -1430,6 +1507,7 @@ class UploadIn(BaseModel):
     sig: str
     data_b64: str
     mime: str = "image/jpeg"
+    lang: str = "uz"
 
 
 def sse(event: str, data: dict) -> str:
@@ -1440,12 +1518,12 @@ def sse(event: str, data: dict) -> str:
 async def vagent_chat(body: ChatIn):
     if not verify_auth(body.uid, body.exp, body.sig):
         async def denied():
-            yield sse("error", {"text": "Avtorizatsiya xatosi. Mini App'ni bot tugmasi orqali oching."})
+            yield sse("error", {"text": _t(body.lang, "auth_error")})
         return StreamingResponse(denied(), media_type="text/event-stream")
 
     if not rate_ok(body.uid):
         async def limited():
-            yield sse("error", {"text": "Juda tez yozayapsiz 🙂 Bir daqiqadan keyin davom etamiz."})
+            yield sse("error", {"text": _t(body.lang, "rate_limit")})
         return StreamingResponse(limited(), media_type="text/event-stream")
 
     sess = await get_session(body.uid, body.chat_id)
@@ -1467,12 +1545,12 @@ async def vagent_chat(body: ChatIn):
         sess.confirmed_token = sess.pending_quote["token"]
         sess.run_confirmed = True   # worker LLM'ni emas, generatsiyani ishga tushiradi
         track(body.uid, "confirmed", {"total": sess.pending_quote["total"]})
-        user_text = "✅ Ha, roziman, boshla!"
+        user_text = _t(sess.lang, "confirm_yes")
     elif body.decline:
         track(body.uid, "declined",
               {"total": sess.pending_quote["total"] if sess.pending_quote else 0})
         sess.pending_quote, sess.confirmed_token = None, None
-        user_text = "❌ Yo'q, hozircha kerak emas."
+        user_text = _t(sess.lang, "decline_no")
     else:
         user_text = body.message.strip() or "Salom!"
         track(body.uid, "msg")
@@ -1544,7 +1622,7 @@ async def vagent_chat(body: ChatIn):
                 else:
                     await claude_stream_turn(sess, emit)
         except Exception as e:
-            await emit("error", {"text": f"Ichki xato: {e}"})
+            await emit("error", {"text": _t(getattr(sess, "lang", "uz"), "internal_error")})
         finally:
             await queue.put(("done", {}))
 
@@ -1567,14 +1645,14 @@ async def vagent_chat(body: ChatIn):
 MAX_VIDEO_MB = 45   # video referens (≤30s) uchun kattaroq limit
 
 
-def _save_upload(uid: str, raw: bytes, mime: str) -> dict:
+def _save_upload(uid: str, raw: bytes, mime: str, lang: str = "uz") -> dict:
     """Yuklangan xom baytlarni faylga saqlab, public URL qaytaradi (base64/raw ikkalasi ham shu yerga keladi)."""
     is_video = (mime or "").startswith("video/")
     limit = MAX_VIDEO_MB if is_video else MAX_UPLOAD_MB
     if not raw:
-        return {"ok": False, "error": "bo'sh fayl"}
+        return {"ok": False, "error": _t(lang, "up_empty")}
     if len(raw) > limit * 1024 * 1024:
-        return {"ok": False, "error": f"Fayl {limit}MB dan katta"}
+        return {"ok": False, "error": _t(lang, "up_toobig", limit=limit)}
     if is_video:
         ext = _MIME_VIDEO_EXT.get(mime, "mp4")
     else:
@@ -1592,7 +1670,7 @@ def _save_upload(uid: str, raw: bytes, mime: str) -> dict:
                 os.remove(path)
             except Exception:
                 pass
-            return {"ok": False, "error": "Video 30 sekunddan uzun — qisqaroq yuklang"}
+            return {"ok": False, "error": _t(lang, "up_toolong")}
         codec = _probe_codec(path)
         # HAR video FONDA tayyorlanadi (javob darrov qaytadi):
         #  - h264 (brauzerda siqilgan yoki tayyor) → tez -c copy remux (toza standart mp4)
@@ -1621,7 +1699,7 @@ async def vagent_upload(body: UploadIn):
         raw = base64.b64decode(body.data_b64)
     except Exception:
         return {"ok": False, "error": "base64 xato"}
-    return _save_upload(body.uid, raw, body.mime)
+    return _save_upload(body.uid, raw, body.mime, getattr(body, "lang", "uz"))
 
 
 @vagent_router.post("/upload-raw")
@@ -1631,10 +1709,11 @@ async def vagent_upload_raw(request: Request):
     exp = request.headers.get("x-exp", "")
     sig = request.headers.get("x-sig", "")
     mime = request.headers.get("x-mime", "image/jpeg")
+    lang = (request.headers.get("x-lang", "uz") or "uz")[:2].lower()
     if not verify_auth(uid, exp, sig):
         return {"ok": False, "error": "auth"}
     raw = await request.body()
-    return _save_upload(uid, raw, mime)
+    return _save_upload(uid, raw, mime, lang)
 
 
 @vagent_router.get("/file/{name}")
