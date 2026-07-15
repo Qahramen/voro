@@ -366,6 +366,33 @@ def rebuild_messages(user_id: str, chat_id: str) -> list:
         msgs.pop(0)
     return msgs
 
+
+def _pending_refs_from_log(user_id: str, chat_id: str) -> list:
+    """BOSHQA QURILMA: sticky refs faqat localStorage'da (sync bo'lmaydi). Saqlangan chat log'idagi
+    so'nggi yuklangan RASM(lar)ni (undan keyin natija bo'lmagan bo'lsa) referens sifatida tiklaymiz —
+    aks holda boshqa qurilmada generatsiya text-to-image bo'lib, yuz o'xshamasdi."""
+    if not chat_id:
+        return []
+    log = None
+    for c in chats_read(user_id):
+        if c.get("id") == chat_id:
+            log = c.get("log") or []
+            break
+    if not log:
+        return []
+    _vext = ("mp4", "webm", "mov", "m4v")
+    refs = []
+    for e in log:
+        t = e.get("t")
+        if t == "user" and e.get("atts"):
+            imgs = [u for u in e["atts"] if isinstance(u, str) and u
+                    and u.rsplit(".", 1)[-1].split("?")[0].lower() not in _vext]
+            if imgs:
+                refs = imgs           # eng so'nggi biriktirilgan rasm(lar)
+        elif t == "result":
+            refs = []                 # generatsiya bo'ldi — referens ishlatildi
+    return refs[:4]
+
 # ============================================================
 # HMAC AUTH
 # ============================================================
@@ -800,6 +827,7 @@ class Session:
         self.run_confirmed: bool = False   # tasdiqdan keyin generatsiyani DETERMINISTIK boshlash
         self.pending_refs: list[str] = []  # foydalanuvchi biriktirgan referens rasmlar (deterministik)
         self.refs_shown: bool = False      # referens rasm(lar) Claude'ga bir marta ko'rsatildimi
+        self.last_result_url: str = ""     # so'nggi yaratilgan rasm — "Qayta ishlash" haqiqiy tahrir bo'lsin
         self.pending_video: str = ""       # foydalanuvchi biriktirgan video (tahrir/motion manba)
         self.pending_video_dur: int = 5    # video davomiyligi (narx uchun)
         self.video_frame_shown: bool = False  # kadr Claude'ga bir marta ko'rsatildimi (kontekstni shishirmaslik)
@@ -1143,6 +1171,12 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
                 cur = list(j.get("reference_urls") or [])
                 merged = list(dict.fromkeys(cur + sess.pending_refs))   # dedup, tartib saqlanadi
                 j["reference_urls"] = merged
+        elif it and sess.last_result_url:
+            # "Qayta ishlash (−50%)" — oldingi NATIJANI referens qilamiz → haqiqiy tahrir
+            # (aks holda yangi text-to-image bo'lib, boshqa rasm chiqardi)
+            for j in jobs:
+                if j.get("kind", "image") == "image" and not j.get("reference_urls"):
+                    j["reference_urls"] = [sess.last_result_url]
         # DETERMINISTIK YUZ SAQLASH: referens rasmli IMAGE ishlar → gpt-image-2 (nano-banana/edit
         # ishlamaydi + gpt referens yuzni juda yaxshi saqlaydi) + promptga identity ko'rsatmasi.
         for j in jobs:
@@ -1301,8 +1335,34 @@ def _tool_status_text(name: str, lang: str):
     return m.get(lang if lang in ("uz", "ru", "en") else "uz", m["uz"])
 
 
+def _strip_url_images(msgs: list) -> None:
+    """O'tgan turn'dagi NATIJA rasm URL bloklarini matnga almashtiramiz. atlas-media URL 403/muddat
+    o'tsa Claude fetch qilolmay keyingi HAR chaqiruvni 400 qiladi ('poisoning'). Faqat url-source rasm."""
+    for m in msgs:
+        c = m.get("content")
+        if not isinstance(c, list):
+            continue
+        for i, b in enumerate(c):
+            if b.get("type") == "image" and (b.get("source") or {}).get("type") == "url":
+                c[i] = {"type": "text", "text": "[yaratilgan rasm ko'rildi]"}
+
+
+def _sanitize_messages(msgs: list) -> None:
+    """Claude API talabi: ketma-ketlik yaroqli bo'lsin — birinchi xabar 'user' (assistant-prefill
+    yoki yetim tool_result bilan boshlanmasin). Bugungi 'must end with a user message' 400'ni oldini oladi."""
+    def bad_head(m):
+        if m.get("role") != "user":
+            return True
+        c = m.get("content")
+        return isinstance(c, list) and any(b.get("type") == "tool_result" for b in c)
+    while msgs and bad_head(msgs[0]):
+        msgs.pop(0)
+
+
 async def claude_stream_turn(sess: Session, emit) -> None:
     system = build_system_prompt(sess.user_id, sess.lang)
+    _strip_url_images(sess.messages)     # eski natija-rasm URL'lari kontekstni zaharlamasin
+    _sanitize_messages(sess.messages)    # yaroqli ketma-ketlik (birinchi xabar user)
 
     for _ in range(MAX_TURN_TOOL_LOOPS):
         assistant_blocks, tool_calls = [], []
@@ -1560,6 +1620,10 @@ async def run_confirmed_generation(sess: "Session", emit):
         return
     results = out.get("results") or []
     ok = sum(1 for r in results if r.get("status") == "ok")
+    # "Qayta ishlash (−50%)" HAQIQIY tahrir bo'lsin: so'nggi yaratilgan rasmni eslab qolamiz
+    for r in results:
+        if r.get("status") == "ok" and r.get("kind") == "image" and r.get("url"):
+            sess.last_result_url = r["url"]
     # Har MUVAFFAQIYATSIZ ish uchun sababni OCHIQ ko'rsat (avval yashirilardi)
     for r in results:
         if r.get("status") != "ok":
@@ -1665,6 +1729,11 @@ async def vagent_chat(body: ChatIn):
     # URL(lar)ni qayta yuborsa — server restart / boshqa qurilma bo'lsa ham referens rasm
     # generatsiyaga YETIB BORADI (aks holda text-to-image bo'lib, o'xshamas natija chiqardi).
     _sticky_refs = [u for u in (body.pending_refs or [])[:4] if u] if not _imgs else []
+    # BOSHQA QURILMA: sticky ham, biriktirilgan rasm ham yo'q bo'lsa — saqlangan log'dan tiklaymiz
+    if not _imgs and not _sticky_refs and not sess.pending_refs:
+        _log_refs = _pending_refs_from_log(body.uid, body.chat_id)
+        if _log_refs:
+            _sticky_refs = _log_refs
 
     _content = []
     if _imgs:
