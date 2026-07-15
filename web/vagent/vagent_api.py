@@ -696,6 +696,13 @@ Oxirgi ishlar:
 
 # MODELLAR
 {json.dumps(get_model_hints(), ensure_ascii=False)}
+
+# RASM MODELINI TANLASH (muhim qoida)
+- MATN aralashgan rasm (storyboard/kadrlarda yozuv, poster, banner, taklifnoma, logo bilan matn, reklama matnли) → HAR DOIM "gpt-image-2" (matn/logoni aniq chizadi; nano-banana matnни buzadi).
+- STORYBOARD (bir nechta kadr, har kadrда izoh/yozuv) → "gpt-image-2".
+- YUZ/QIYOFA referensi bilan aniqlik muhim bo'lsa (odamni professional joylashtirish, "meni ... qil") → "gpt-image-2" (image-to-image, referens bilan yuzni yaxshi saqlaydi).
+- Foydalanuvchi "yuz o'xshamadi / meniga o'xshamaydi / qiyofa boshqacha" desa → o'sha referens rasm bilan "gpt-image-2" da qayta yasa (is_iteration=true), nano-banana emas.
+- Oddiy, matnsiz, tez sketch/g'oya/qoralama → "nano-banana-2" (arzon, tez).
 Narxni faqat estimate_cost bilan hisobla — yoddan aytma."""
 
 # ============================================================
@@ -723,20 +730,41 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
     # so'rovga "Request parameters are invalid" kabi VAQTINCHALIK xato beradi.
     # Foydalanuvchiga xato ko'rsatishdan oldin jimgina 2-3 marta qayta urinamiz.
     _retry_msg = {"uz": "Qayta urinyapman…", "ru": "Пробую ещё раз…", "en": "Retrying…"}
+    _fb_msg = {"uz": "GPT Image 2 bilan urinib ko'ryapman…",
+               "ru": "Пробую через GPT Image 2…", "en": "Trying with GPT Image 2…"}
+    _lang = getattr(sess, "lang", "uz")
     max_attempts = 4 if j["kind"] == "image" else 2   # nano-banana flakiness yuqori
-    result, last_err = None, None
-    for attempt in range(1, max_attempts + 1):
-        try:
-            job_id = await atlas_create_job(j["kind"], j["model"], payload)
-            result = await atlas_poll_job(job_id, on_progress=on_progress)
-            if result.get("status") == "ok":
-                break
-            last_err = result.get("error")
-        except Exception as e:
-            result, last_err = None, str(e)
-        if attempt < max_attempts:
-            await emit("status", {"text": _retry_msg.get(getattr(sess, "lang", "uz"), _retry_msg["uz"])})
-            await asyncio.sleep(1.5)
+
+    async def _attempt(model_name, tries):
+        r, err = None, None
+        for attempt in range(1, tries + 1):
+            try:
+                job_id = await atlas_create_job(j["kind"], model_name, payload)
+                r = await atlas_poll_job(job_id, on_progress=on_progress)
+                if r.get("status") == "ok":
+                    return r, None
+                err = r.get("error")
+            except Exception as e:
+                r, err = None, str(e)
+            if attempt < tries:
+                await emit("status", {"text": _retry_msg.get(_lang, _retry_msg["uz"])})
+                await asyncio.sleep(1.5)
+        return r, err
+
+    used_model = j["model"]
+    result, last_err = await _attempt(j["model"], max_attempts)
+
+    # AUTO-FALLBACK: nano-banana rasm barcha urinishlarda yiqilsa -> GPT Image 2
+    # (ancha ishonchli; matn/yuz uchun ham yaxshiroq). Owner Atlas xarajatini ko'taradi.
+    if (not result or result.get("status") != "ok") and j["kind"] == "image" \
+            and "gpt" not in (j.get("model", "").lower()):
+        await emit("status", {"text": _fb_msg.get(_lang, _fb_msg["uz"])})
+        used_model = "gpt-image-2"
+        r2, err2 = await _attempt("gpt-image-2", 2)
+        if r2 and r2.get("status") == "ok":
+            result, last_err = r2, None
+        else:
+            last_err = err2 or last_err
 
     if not result or result.get("status") != "ok":
         refund_credits(uid, price)
@@ -745,7 +773,7 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
         return {"label": label,
                 "error": f"Muvaffaqiyatsiz: {last_err}. {price} tangacha qaytarildi."}
 
-    track(uid, "gen_ok", {"price": price, "model": j["model"], "kind": j["kind"]})
+    track(uid, "gen_ok", {"price": price, "model": used_model, "kind": j["kind"]})
     entry = {"label": label, "model": j["model"], "price": price,
              "kind": j["kind"], "url": result["url"], "ts": int(time.time())}
     memory_log_job(uid, entry)
