@@ -1040,7 +1040,9 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
     _fb_msg = {"uz": "GPT Image 2 bilan urinib ko'ryapman…",
                "ru": "Пробую через GPT Image 2…", "en": "Trying with GPT Image 2…"}
     _lang = getattr(sess, "lang", "uz")
-    max_attempts = 4 if j["kind"] == "image" else 2   # nano-banana flakiness yuqori
+    # HAR urinish = alohida to'lanadigan Atlas chaqiruvi. Ilgari 4 edi (bitta to'lov uchun 4x xarajat).
+    # Referens edit endi gpt-image-2 (ishonchli), nano flakiness kamaydi → 2 ga tushiramiz (xarajat 2x kam).
+    max_attempts = 2
 
     async def _attempt(model_name, tries):
         r, err = None, None
@@ -1119,7 +1121,11 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
     if name == "estimate_cost":
         out, total = [], 0
         for j in inp.get("jobs", []):
-            p = calc_price(j["kind"], j["model"], j.get("resolution", "720p"),
+            # referensli rasm request_confirmation'da gpt-image-2-edit'ga o'tadi — estimate ham mos bo'lsin
+            _model = j["model"]
+            if j.get("kind", "image") == "image" and (j.get("reference_urls") or sess.pending_refs):
+                _model = "gpt-image-2-edit"
+            p = calc_price(j["kind"], _model, j.get("resolution", "720p"),
                            _safe_int(j.get("duration"), 5))
             out.append({**j, "price": p})
             total += p or 0
@@ -1141,7 +1147,7 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
         # ishlamaydi + gpt referens yuzni juda yaxshi saqlaydi) + promptga identity ko'rsatmasi.
         for j in jobs:
             if j.get("kind", "image") == "image" and j.get("reference_urls"):
-                j["model"] = "gpt-image-2"
+                j["model"] = "gpt-image-2-edit"   # yuqori-fidelity edit (Atlas $0.167) — alohida narx (10 tanga)
                 _p = str(j.get("prompt", ""))
                 if not any(w in _p.lower() for w in ("exact face", "same face", "identity", "same person", "facial features")):
                     j["prompt"] = _p.rstrip(". ") + (
@@ -1309,7 +1315,12 @@ async def claude_stream_turn(sess: Session, emit) -> None:
                          "anthropic-version": "2023-06-01",
                          "content-type": "application/json"},
                 json={"model": ANTHROPIC_MODEL, "max_tokens": 3000,
-                      "system": system, "tools": TOOLS,
+                      # PROMPT CACHING: system+tools STATIK prefiksi keshlanadi (~90% input token tejash).
+                      # Kesh order: tools → system → messages; system oxirgi blokiga cache_control qo'ysak
+                      # tools+system keshlanadi (har turn 12 chaqiruvga qadar qayta hisoblanmaydi).
+                      "system": [{"type": "text", "text": system,
+                                  "cache_control": {"type": "ephemeral"}}],
+                      "tools": TOOLS,
                       "messages": sess.messages, "stream": True},
             ) as resp:
                 if resp.status_code != 200:
@@ -1893,6 +1904,8 @@ async def vagent_voice(body: UploadIn):
     """Ovozli buyruq → matn (Groq Whisper)."""
     if not verify_auth(body.uid, body.exp, body.sig):
         return {"ok": False, "error": "auth"}
+    if not rate_ok(body.uid):          # pulli Groq API — spamdan himoya
+        return {"ok": False, "error": _t(getattr(body, "lang", "uz"), "rate_limit")}
     if not GROQ_API_KEY:
         return {"ok": False, "error": "GROQ_API_KEY sozlanmagan"}
     try:

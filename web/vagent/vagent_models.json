@@ -3,8 +3,9 @@
 
   "pricing": {
     "image": {
-      "nano-banana-2":  {"base": 2},
-      "gpt-image-2":    {"base": 5}
+      "nano-banana-2":   {"base": 3},
+      "gpt-image-2":     {"base": 5},
+      "gpt-image-2-edit": {"base": 10}
     },
     "video": {
       "gemini-omni":  {"base_per_sec": 4, "res_mult": {"720p": 1.0}},
