@@ -1414,6 +1414,8 @@ async def vagent_chat(body: ChatIn):
                                  "source": {"type": "base64", "media_type": _mt, "data": _b64}})
     if _vids:
         vurl = _vids[0]
+        if not _sticky_vid and vurl != sess.pending_video:
+            sess.video_frame_shown = False   # YANGI video biriktirildi — uning kadrini albatta ko'rsatamiz
         sess.pending_video = vurl
         if _sticky_vid:
             user_text += f"\n[SUHBATDAGI VIDEO (tahrirlanmoqda): {vurl} — bu videoni ishlat, qayta so'rama]"
