@@ -551,22 +551,19 @@ lucide-react/dist/esm/lucide-react.js:
     if(b.classList.contains("tap")||b.classList.contains("dock-item")) hide();
   }, true);
 
-  // Favicon — browser URL panelida voro.uz DUMALOQ logosi (qora doira + oq V monogram)
+  // Favicon — foydalanuvchi yuborgan AYNAN o'sha dumaloq logo (PNG/ICO, tashqarisi transparent)
   function setFavicon(){
     try{
-      var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
-        +'<circle cx="50" cy="50" r="50" fill="#000"/>'
-        +'<path d="M23 27 L50 83 L77 27" fill="none" stroke="#fff" stroke-width="8.6" stroke-linejoin="round" stroke-linecap="round"/>'
-        +'<path d="M44 27 L60 60" fill="none" stroke="#fff" stroke-width="7.9" stroke-linecap="round"/>'
-        +'</svg>';
-      var href="data:image/svg+xml,"+encodeURIComponent(svg);
+      var V="?v=3";
       [].slice.call(document.querySelectorAll('link[rel~="icon"],link[rel="shortcut icon"],link[rel="apple-touch-icon"]')).forEach(function(l){ l.parentNode&&l.parentNode.removeChild(l); });
-      var fav=document.createElement("link");
-      fav.rel="icon"; fav.type="image/svg+xml"; fav.href=href;
-      document.head.appendChild(fav);
-      var ap=document.createElement("link");   // iOS "Add to Home Screen" uchun ham
-      ap.rel="apple-touch-icon"; ap.href=href;
-      document.head.appendChild(ap);
+      function add(rel,type,href,sizes){
+        var l=document.createElement("link");
+        l.rel=rel; if(type)l.type=type; if(sizes)l.sizes=sizes; l.href=href;
+        document.head.appendChild(l);
+      }
+      add("icon","image/png","/voro-fav-512.png"+V,"512x512");   // zamonaviy brauzerlar
+      add("icon","image/x-icon","/favicon.ico"+V);                // eski/zaxira (haqiqiy .ico)
+      add("apple-touch-icon",null,"/voro-fav-180.png"+V);         // iOS "Bosh ekranga"
     }catch(e){}
   }
   setFavicon();

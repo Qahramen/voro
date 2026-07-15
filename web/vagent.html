@@ -813,7 +813,14 @@ function showTyping(label){
 function hideTyping(){ if(typingEl){typingEl.remove();} }
 
 inp.addEventListener("input",()=>{inp.style.height="auto";inp.style.height=Math.min(inp.scrollHeight,110)+"px";});
-inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}});
+// Enter = yuborish (Shift+Enter = yangi qator). IME (matn terish) paytida yubormaydi.
+inp.addEventListener("keydown",e=>{
+  const isEnter=(e.key==="Enter"||e.keyCode===13||e.which===13);
+  if(isEnter && !e.shiftKey && !e.isComposing && e.keyCode!==229){
+    e.preventDefault(); e.stopPropagation();
+    sendMsg();
+  }
+});
 function quick(b){inp.value=b.textContent;sendMsg();}
 
 // ===== PROFIL + INBOX RECOVERY =====
@@ -983,35 +990,52 @@ document.addEventListener("click",(e)=>{
 
 // ===== RASM BIRIKTIRISH =====
 document.getElementById("attach").onclick=()=>fileInp.click();
-fileInp.onchange=async()=>{
-  for(const f of fileInp.files){
-    if(attachments.length>=4)break;
-    const isVid=(f.type||"").startsWith("video/");
-    const objurl=URL.createObjectURL(f);   // TEZ preview — base64 o'qish yo'q (katta video sekinlashmaydi)
-    const inner=isVid
-      ? `<video src="${objurl}" muted playsinline></video><span class="att-play">▶</span>`
-      : `<img src="${objurl}">`;
-    const chip=el(`<div class="att-chip loading${isVid?' vid':''}">${inner}<button class="x">${ic('x',11)}</button></div>`);
-    attbar.appendChild(chip);attbar.classList.add("show");
-    const entry={url:null,elm:chip};attachments.push(entry);
-    chip.querySelector(".x").onclick=()=>{attachments=attachments.filter(a=>a!==entry);chip.remove();
-      if(!attachments.length)attbar.classList.remove("show");};
-    try{
-      // XOM binary yuklaymiz (base64 emas) → 33% kichik + tez. Auth header'da.
-      const r=await fetch(`${API_BASE}/upload-raw`,{method:"POST",
-        headers:{"X-Uid":AUTH.uid,"X-Exp":AUTH.exp,"X-Sig":AUTH.sig,"X-Mime":f.type||"application/octet-stream"},
-        body:f});
-      const d=await r.json();
-      if(d.ok){
-        entry.url=d.url;chip.classList.remove("loading");
-        if(d.kind==="video") setPV(d.url);   // video yopishqoq bo'ladi (agent unutmaydi)
-      }
-      else{chip.remove();attachments=attachments.filter(a=>a!==entry);
-           chat.appendChild(el(`<div class="err">Yuklanmadi: ${esc(d.error||"")}</div>`));}
-    }catch{chip.remove();attachments=attachments.filter(a=>a!==entry);}
+// BITTA fayl (input/paste/drag ikkalasi ham shu funksiyani ishlatadi)
+async function addAttachment(f){
+  if(!f || attachments.length>=4) return;
+  const isVid=(f.type||"").startsWith("video/");
+  const objurl=URL.createObjectURL(f);   // TEZ preview — base64 o'qish yo'q
+  const inner=isVid
+    ? `<video src="${objurl}" muted playsinline></video><span class="att-play">▶</span>`
+    : `<img src="${objurl}">`;
+  const chip=el(`<div class="att-chip loading${isVid?' vid':''}">${inner}<button class="x">${ic('x',11)}</button></div>`);
+  attbar.appendChild(chip);attbar.classList.add("show");
+  const entry={url:null,elm:chip};attachments.push(entry);
+  chip.querySelector(".x").onclick=()=>{attachments=attachments.filter(a=>a!==entry);chip.remove();
+    if(!attachments.length)attbar.classList.remove("show");};
+  try{
+    const r=await fetch(`${API_BASE}/upload-raw`,{method:"POST",
+      headers:{"X-Uid":AUTH.uid,"X-Exp":AUTH.exp,"X-Sig":AUTH.sig,"X-Mime":f.type||"application/octet-stream"},
+      body:f});
+    const d=await r.json();
+    if(d.ok){
+      entry.url=d.url;chip.classList.remove("loading");
+      if(d.kind==="video") setPV(d.url);
+    }
+    else{chip.remove();attachments=attachments.filter(a=>a!==entry);
+         chat.appendChild(el(`<div class="err">Yuklanmadi: ${esc(d.error||"")}</div>`));}
+  }catch{chip.remove();attachments=attachments.filter(a=>a!==entry);}
+}
+fileInp.onchange=async()=>{ for(const f of fileInp.files) await addAttachment(f); fileInp.value=""; };
+
+// KOMPDA: rasmni bevosita chatga PASTE qilish (Ctrl/Cmd+V) — clipboard'dagi rasm(lar)ni biriktiramiz
+inp.addEventListener("paste",(e)=>{
+  const items=(e.clipboardData||{}).items||[];
+  let handled=false;
+  for(const it of items){
+    if(it.kind==="file" && (it.type||"").startsWith("image/")){
+      const f=it.getAsFile();
+      if(f){ handled=true; addAttachment(f); }
+    }
   }
-  fileInp.value="";
-};
+  if(handled) e.preventDefault();   // rasm bo'lsa — matn maydoniga [object] tushmasin
+});
+// KOMPDA: rasmni chatga SUDRAB TASHLASH (drag & drop) ham ishlasin
+["dragover","drop"].forEach(evt=>chat.addEventListener(evt,(e)=>{e.preventDefault();e.stopPropagation();}));
+document.addEventListener("drop",(e)=>{
+  const fs=(e.dataTransfer||{}).files||[];
+  if(fs.length){ e.preventDefault(); for(const f of fs) if((f.type||"").match(/^(image|video)\//)) addAttachment(f); }
+});
 
 // ===== OVOZLI BUYRUQ =====
 let mediaRec=null,recChunks=[];
