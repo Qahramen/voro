@@ -1393,6 +1393,41 @@ def _strip_url_images(msgs: list) -> None:
                 c[i] = {"type": "text", "text": "[yaratilgan rasm ko'rildi]"}
 
 
+def _compact_tool_noise(msgs: list) -> list:
+    """O'TGAN turnlardagi tool-almashinuvlarni (estimate_cost / request_confirmation / present_options /
+    search_skills va h.k. — tool_use + juftlangan tool_result) tarixdan olib tashlaymiz. Faqat HAQIQIY
+    suhbat (user matni ↔ assistant matni) qoladi → 48 xabarga ancha ko'p almashinuv sig'adi, uzun
+    suhbatda agent MAQSADNI unutmaydi/qayta so'ramaydi. Xavfsiz: yetim tool_use/tool_result qolmaydi.
+    Joriy turn'ning bloklari bu funksiya chaqirilgach QO'SHILADI — ular tegilmaydi."""
+    drop_ids = set()
+    stage1 = []
+    for m in msgs:
+        c = m.get("content")
+        if m.get("role") == "assistant" and isinstance(c, list):
+            tool_uses = [b for b in c if b.get("type") == "tool_use"]
+            texts = [b for b in c if b.get("type") == "text" and (b.get("text") or "").strip()]
+            if tool_uses and not texts:
+                for b in tool_uses:
+                    drop_ids.add(b.get("id"))
+                continue                       # faqat tool_use — butun xabarni tashlaymiz
+            if tool_uses and texts:
+                for b in tool_uses:
+                    drop_ids.add(b.get("id"))
+                m = {"role": "assistant", "content": texts}   # matnni saqlaymiz, tool_use'ni tashlaymiz
+        stage1.append(m)
+    out = []
+    for m in stage1:
+        c = m.get("content")
+        if m.get("role") == "user" and isinstance(c, list):
+            kept = [b for b in c if not (b.get("type") == "tool_result"
+                                          and b.get("tool_use_id") in drop_ids)]
+            if not kept:
+                continue                       # juftlangan tool_result'lar ketdi — bo'sh user tashlanadi
+            m = {"role": "user", "content": kept}
+        out.append(m)
+    return out
+
+
 def _sanitize_messages(msgs: list) -> None:
     """Claude API talabi: ketma-ketlik yaroqli bo'lsin — birinchi xabar 'user' (assistant-prefill
     yoki yetim tool_result bilan boshlanmasin). Bugungi 'must end with a user message' 400'ni oldini oladi."""
@@ -1407,6 +1442,7 @@ def _sanitize_messages(msgs: list) -> None:
 
 async def claude_stream_turn(sess: Session, emit) -> None:
     system = build_system_prompt(sess.user_id, sess.lang)
+    sess.messages = _compact_tool_noise(sess.messages)   # o'tgan tool-shovqinini tozalash → uzun chat xotirasi
     _strip_url_images(sess.messages)     # eski natija-rasm URL'lari kontekstni zaharlamasin
     _sanitize_messages(sess.messages)    # yaroqli ketma-ketlik (birinchi xabar user)
 
