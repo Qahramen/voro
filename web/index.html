@@ -416,7 +416,13 @@ lucide-react/dist/esm/lucide-react.js:
 <script>
 (function(){
   var ICON16='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><circle cx="9" cy="14" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.2" fill="currentColor" stroke="none"/><path d="M12 8V4.5M8.5 4.5h7"/></svg>';
-  var overlay=null, frame=null, linkUrl=null, loading=false, shown=false, prefetching=false;
+  var overlay=null, frame=null, linkBase=null, loading=false, shown=false, prefetching=false;
+  // Sayt tili: voro_lang cookie (uz/ru/en). Vagent SHU tilda ochiladi.
+  function curLang(){
+    try{ var m=document.cookie.match(/(?:^|;\s*)voro_lang=(uz|ru|en)/); if(m) return m[1]; }catch(e){}
+    var h=(document.documentElement.lang||"").slice(0,2);
+    return (h==="ru"||h==="en")?h:"uz";
+  }
 
   // voro.uz sayti foni bilan BIR XIL glow — Vagent'ning O'Z foni bo'lmaydi (seam yo'q)
   function siteBg(){
@@ -445,7 +451,23 @@ lucide-react/dist/esm/lucide-react.js:
     var dr=dock.getBoundingClientRect();
     return Math.max(0,Math.round(window.innerHeight-dr.top)+14);
   }
-  function withParams(u){ return u+(u.indexOf("?")>=0?"&":"?")+"embed=1&padb="+calcPadb(); }
+  // Server URL'ida lang=uz bo'lishi mumkin (u birinchi kelib qolsa qp.get uni oladi) — shuning uchun
+  // eski lang'ni OLIB TASHLAB, sayt tilini (cookie) qo'shamiz. Til o'zgarsa applyFrame qayta yuklaydi.
+  function withParams(u){
+    var parts=u.split("?"), base=parts[0];
+    var qs=(parts[1]||"").split("&").filter(function(kv){ return kv && kv.indexOf("lang=")!==0 && kv.indexOf("embed=")!==0 && kv.indexOf("padb=")!==0; });
+    qs.push("embed=1"); qs.push("lang="+curLang()); qs.push("padb="+calcPadb());
+    return base+"?"+qs.join("&");
+  }
+  // iframe'ni joriy til bilan yuklaymiz; til o'zgargan bo'lsa qayta yuklaymiz (menyu/til yangilanadi)
+  function applyFrame(){
+    if(!linkBase||!frame) return;
+    var l=curLang();
+    if(frame.getAttribute("data-vglang")!==l || !frame.src){
+      frame.src=withParams(linkBase);
+      frame.setAttribute("data-vglang", l);
+    }
+  }
   function position(){
     if(!overlay) return;
     var nav=document.querySelector("nav.top-nav");
@@ -480,20 +502,20 @@ lucide-react/dist/esm/lucide-react.js:
   }
   // Ochishni TEZ qilish uchun link'ni oldindan olib qo'yamiz
   function prefetch(){
-    if(linkUrl||prefetching) return; prefetching=true;
+    if(linkBase||prefetching) return; prefetching=true;
     fetch("/api/vagent-link",{credentials:"include"}).then(function(r){return r.json();}).then(function(d){
       prefetching=false;
-      if(d&&d.url){ linkUrl=withParams(d.url); ensureOverlay(); if(!frame.src) frame.src=linkUrl; }
+      if(d&&d.url){ linkBase=d.url; ensureOverlay(); applyFrame(); }
     }).catch(function(){ prefetching=false; });
   }
   function openVagent(){
     ensureOverlay();
-    if(linkUrl){ if(!frame.src) frame.src=linkUrl; show(); return; }   // darrov ochiladi
-    show();                                                            // overlay'ni DARROV ko'rsatamiz (loading)
+    if(linkBase){ applyFrame(); show(); return; }   // darrov ochiladi (joriy til bilan)
+    show();                                          // overlay'ni DARROV ko'rsatamiz (loading)
     if(loading) return; loading=true;
     fetch("/api/vagent-link",{credentials:"include"}).then(function(r){return r.json();}).then(function(d){
       loading=false;
-      if(d&&d.url){ linkUrl=withParams(d.url); frame.src=linkUrl; }
+      if(d&&d.url){ linkBase=d.url; applyFrame(); }
       else { hide(); alert("Vagent — avval saytga kiring (Sign in)."); }
     }).catch(function(){ loading=false; hide(); alert("Vagent — avval saytga kiring (Sign in)."); });
   }
