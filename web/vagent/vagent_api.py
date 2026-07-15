@@ -411,6 +411,42 @@ def _atlas_model_id(friendly: str, kind: str, n_refs: int, has_video: bool = Fal
     return "bytedance/seedance-2.0/text-to-video"
 
 
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()   # iPhone HEIC rasmlarni PIL o'qiy olsin (aks holda "Could not process image")
+except Exception:
+    pass
+
+
+def _normalize_image(path: str) -> str:
+    """Rasmni Claude/Atlas uchun TOZA JPEG ga keltiradi (iPhone HEIC, RGBA, EXIF burilish, katta o'lcham).
+    HEIC/HEIF Claude va Atlas'da 'Could not process image' beradi — shuning uchun HAR rasm normallashtiriladi."""
+    try:
+        from PIL import Image, ImageOps
+        img = Image.open(path)
+        try:
+            img = ImageOps.exif_transpose(img)   # telefon aylanmasini to'g'rilaymiz
+        except Exception:
+            pass
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        MAX = 2048
+        if max(img.size) > MAX:
+            img.thumbnail((MAX, MAX))
+        out = (path.rsplit(".", 1)[0] if "." in path else path) + "_n.jpg"
+        img.save(out, format="JPEG", quality=88)
+        if os.path.exists(out) and os.path.getsize(out) > 0:
+            if out != path:
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+            return out
+    except Exception:
+        pass
+    return path
+
+
 def _attachment_b64(url):
     """voro.uz/vagent/file/ lokal URL'idan XOM base64 + media_type (Atlas generatsiya uchun)."""
     try:
@@ -452,7 +488,7 @@ def _vision_b64(url):
         img.save(buf, format="JPEG", quality=85)
         return base64.b64encode(buf.getvalue()).decode(), "image/jpeg"
     except Exception:
-        return _attachment_b64(url)              # PIL xato bersa — xom holga qaytamiz
+        return None, None                        # PIL o'qiy olmasa — xom yubormaymiz (Claude "Could not process image" bermasin)
 
 
 async def _atlas_upload_ref(url):
@@ -1256,7 +1292,12 @@ async def claude_stream_turn(sess: Session, emit) -> None:
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
-                    await emit("error", {"text": f"Claude API {resp.status_code}: {body[:200]}"})
+                    _raw = (body.decode("utf-8", "ignore") if isinstance(body, (bytes, bytearray)) else str(body)).lower()
+                    print(f"[claude api {resp.status_code}] {str(body)[:300]}")   # xom xato faqat serverda log'da
+                    _lang = getattr(sess, "lang", "uz")
+                    # xom JSON/kodni EMAS — do'stona xabar ko'rsatamiz
+                    _msg = _t(_lang, "bad_image") if "image" in _raw else _t(_lang, "api_busy")
+                    await emit("error", {"text": _msg})
                     return
 
                 cur_text, cur_tool, cur_tool_json = "", None, ""
@@ -1353,6 +1394,12 @@ _UI = {
     "internal_error": {"uz": "Ichki xato yuz berdi. Qayta urinib ko'ring.",
                        "ru": "Произошла внутренняя ошибка. Попробуйте снова.",
                        "en": "An internal error occurred. Please try again."},
+    "api_busy": {"uz": "Hozir yuklama yuqori — bir ozdan keyin qayta urinib ko'ring 🙏",
+                 "ru": "Сейчас высокая нагрузка — попробуйте через минуту 🙏",
+                 "en": "High load right now — please try again in a moment 🙏"},
+    "bad_image": {"uz": "Rasmni o'qib bo'lmadi — iltimos, boshqa rasm (JPG yoki PNG) yuboring.",
+                  "ru": "Не удалось обработать изображение — пришлите другое (JPG или PNG).",
+                  "en": "Couldn't read the image — please send another one (JPG or PNG)."},
     "confirm_yes": {"uz": "✅ Ha, roziman, boshla!",
                     "ru": "✅ Да, согласен, начинай!",
                     "en": "✅ Yes, go ahead!"},
@@ -1388,6 +1435,18 @@ def _t(lang: str, key: str, **kw) -> str:
         return s
 
 
+def _clean_err(text, lang: str) -> str:
+    """Xavfsizlik to'ri: xom JSON/API/kod ko'rinsa — do'stona umumiy xabarga almashtiramiz
+    (foydalanuvchiga HECH QACHON backend kodi/JSON ko'rsatmaymiz)."""
+    lang = lang if lang in ("uz", "ru", "en") else "uz"
+    t = str(text or "")
+    low = t.lower()
+    if any(x in t for x in ("{", "}", "[", "request_id", "status_code", "Traceback", "b'")) \
+       or any(x in low for x in ("http", "api ", "claude", "atlas", "json", "created_at", "completed_at")):
+        return _t(lang, "api_busy")
+    return t
+
+
 def _localize_err(err, lang: str) -> str:
     """Ichki/Atlas xatolarini tanlangan tilга tarjima (raw boshqa-til matn ko'rinmasin)."""
     lang = lang if lang in ("uz", "ru", "en") else "uz"
@@ -1399,14 +1458,14 @@ def _localize_err(err, lang: str) -> str:
         "nsfw": {"uz": "kontent qoidalarga mos emas", "ru": "контент не соответствует правилам", "en": "content not allowed"},
         "unknown": {"uz": "noma'lum xato", "ru": "неизвестная ошибка", "en": "unknown error"},
     }
-    if "invalid" in e or "parameter" in e or "parametr" in e:
-        key = "param"
-    elif "empty" in e or "bo'sh" in e or "bo‘sh" in e or "bosh qaytdi" in e:
-        key = "empty"
+    if "nsfw" in e or "safety" in e or "reject" in e or "content" in e or "bloklandi" in e or "policy" in e:
+        key = "nsfw"
     elif "timeout" in e or "vaqt tugadi" in e or "истек" in e:
         key = "timeout"
-    elif "nsfw" in e or "content" in e or "bloklandi" in e:
-        key = "nsfw"
+    elif "empty" in e or "bo'sh" in e or "bo‘sh" in e or "bosh qaytdi" in e:
+        key = "empty"
+    elif "invalid" in e or "parameter" in e or "parametr" in e:
+        key = "param"
     else:
         key = "unknown"
     return tbl[key][lang]
@@ -1462,7 +1521,7 @@ async def run_confirmed_generation(sess: "Session", emit):
     sess.pending_video = ""
     sess.video_frame_shown = False       # keyingi video uchun kadr qayta ko'rsatiladi
     if out.get("error"):
-        await emit("error", {"text": out["error"]})
+        await emit("error", {"text": _clean_err(out["error"], lang)})
         return
     results = out.get("results") or []
     ok = sum(1 for r in results if r.get("status") == "ok")
@@ -1687,6 +1746,9 @@ def _save_upload(uid: str, raw: bytes, mime: str, lang: str = "uz") -> dict:
             pass
         _start_bg_transcode(path, final_path, remux=(codec == "h264"))
         return {"ok": True, "url": final_url, "kind": "video", "duration": dur}
+    # RASM: iPhone HEIC/RGBA/katta → toza JPEG (Claude va Atlas qabul qilsin)
+    path = _normalize_image(path)
+    name = os.path.basename(path)
     return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "image"}
 
 
