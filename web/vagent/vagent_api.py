@@ -381,19 +381,24 @@ def verify_auth(user_id: str, exp: str, sig: str) -> bool:
 # ============================================================
 
 # INTEGRATSIYA: qisqa model nomlarini real Atlas ID'lariga moslash (variant referens soniga qarab)
-def _atlas_model_id(friendly: str, kind: str, n_refs: int) -> str:
+def _atlas_model_id(friendly: str, kind: str, n_refs: int, has_video: bool = False) -> str:
     m = (friendly or "").lower()
     if kind == "image":
         base = "openai/gpt-image-2" if "gpt" in m else "google/nano-banana-2"
         return base + ("/edit" if n_refs > 0 else "/text-to-image")
     # video
+    if "gemini" in m or "omni" in m:
+        if has_video: return "google/gemini-omni-flash/video-edit"       # video TAHRIR
+        if n_refs >= 1: return "google/gemini-omni-flash/image-to-video"
+        return "google/gemini-omni-flash/text-to-video"
     if "veo" in m:
         if n_refs >= 2: return "google/veo3.1/reference-to-video"
         if n_refs >= 1: return "google/veo3.1-fast/image-to-video"
         return "google/veo3.1/text-to-video"
     if "kling" in m:
         return "kwaivgi/kling-v3.0-std/image-to-video"   # kling v3 referens rasm talab qiladi
-    if n_refs >= 2: return "bytedance/seedance-2.0/reference-to-video"
+    if has_video or n_refs >= 2:
+        return "bytedance/seedance-2.0/reference-to-video"   # motion transfer / @video1
     if n_refs >= 1: return "bytedance/seedance-2.0/image-to-video"
     return "bytedance/seedance-2.0/text-to-video"
 
@@ -462,20 +467,92 @@ async def _atlas_upload_ref(url):
         return url
 
 
+_VIDEO_MIME = {"mp4": "video/mp4", "webm": "video/webm", "mov": "video/quicktime", "m4v": "video/mp4"}
+_MIME_VIDEO_EXT = {"video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/x-m4v": "m4v"}
+
+
+def _video_duration(path: str, default: int = 5) -> int:
+    """ffprobe orqali video davomiyligini (sekund) olamiz — narx uchun."""
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, timeout=20)
+        d = float((out.stdout or "").strip())
+        return max(1, min(30, int(round(d))))     # 1..30s
+    except Exception:
+        return default
+
+
+def _extract_frame_b64(path: str):
+    """Videodan 1 kadr (o'rtadan) olib, Claude vision uchun kichraytirilgan JPEG base64 qaytaramiz."""
+    try:
+        import subprocess, io
+        from PIL import Image
+        out = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", "1", "-i", path, "-frames:v", "1", "-f", "image2pipe",
+             "-vcodec", "png", "-"],
+            capture_output=True, timeout=25)
+        if not out.stdout:
+            return None, None
+        img = Image.open(io.BytesIO(out.stdout))
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        if max(img.size) > 1200:
+            img.thumbnail((1200, 1200))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=82)
+        return base64.b64encode(buf.getvalue()).decode(), "image/jpeg"
+    except Exception:
+        return None, None
+
+
+async def _atlas_upload_video(url):
+    """Lokal video URL'ni Atlas uploadMedia orqali aliyuncs URL'ga yuklaydi (video-edit uchun)."""
+    try:
+        name = url.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
+        path = os.path.join(UPLOADS_DIR, name)
+        if not os.path.exists(path):
+            return url
+        ext = name.rsplit(".", 1)[-1].lower()
+        mt = _VIDEO_MIME.get(ext, "video/mp4")
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        async with httpx.AsyncClient(timeout=180) as c:
+            r = await c.post(
+                f"{ATLAS_BASE}/api/v1/model/uploadMedia",
+                headers={"Authorization": f"Bearer {ATLAS_API_KEY}", "User-Agent": "Mozilla/5.0"},
+                files={"file": (f"ref.{ext}", raw, mt)})
+            d = (r.json().get("data") or {})
+            return d.get("download_url") or url
+    except Exception:
+        return url
+
+
 async def atlas_create_job(kind: str, model: str, payload: dict) -> str:
     refs = payload.get("references") or []
     refs = [await _atlas_upload_ref(u) for u in refs]   # lokal -> Atlas aliyuncs
-    model_id = _atlas_model_id(model, kind, len(refs))
+    vurl = payload.get("video_url") or ""
+    video_ref = await _atlas_upload_video(vurl) if vurl else ""
+    model_id = _atlas_model_id(model, kind, len(refs), has_video=bool(video_ref))
     endpoint = "generateImage" if kind == "image" else "generateVideo"
+    is_video_edit = "video-edit" in model_id
     body = {"model": model_id, "prompt": payload.get("prompt", "")}
-    if payload.get("negative_prompt"):
-        body["negative_prompt"] = payload["negative_prompt"]
-    if payload.get("aspect_ratio"):
-        body["aspect_ratio"] = payload["aspect_ratio"]
-    if kind == "video":
-        body["resolution"] = payload.get("resolution", "720p")
-        body["duration"] = int(payload.get("duration", 5))
-    if refs:
+    # VIDEO-EDIT: resolution/duration/aspect YUBORILMAYDI — natija manba videoga ergashadi
+    if not is_video_edit:
+        if payload.get("negative_prompt"):
+            body["negative_prompt"] = payload["negative_prompt"]
+        if payload.get("aspect_ratio"):
+            body["aspect_ratio"] = payload["aspect_ratio"]
+        if kind == "video":
+            body["resolution"] = payload.get("resolution", "720p")
+            body["duration"] = _safe_int(payload.get("duration"), 5)
+    if video_ref:
+        body["video"] = video_ref                     # tahrir/motion manba videosi
+        if refs:
+            body["images"] = refs                     # video + referens rasmlar (0-5)
+    elif refs:
         if "reference-to-video" in model_id or len(refs) > 1:
             body["images"] = refs
         else:
@@ -558,6 +635,8 @@ class Session:
         self.confirmed_token: Optional[str] = None
         self.run_confirmed: bool = False   # tasdiqdan keyin generatsiyani DETERMINISTIK boshlash
         self.pending_refs: list[str] = []  # foydalanuvchi biriktirgan referens rasmlar (deterministik)
+        self.pending_video: str = ""       # foydalanuvchi biriktirgan video (tahrir/motion manba)
+        self.pending_video_dur: int = 5    # video davomiyligi (narx uchun)
         self.last_jobs: list[dict] = []
         self.active_jobs = 0
         self.updated = time.time()
@@ -606,6 +685,7 @@ JOB_ITEM_SCHEMA = {
         "resolution": {"type": "string"},
         "duration": {"type": "integer"},
         "reference_urls": {"type": "array", "items": {"type": "string"}},
+        "video_url": {"type": "string", "description": "Tahrirlanadigan/motion manba video URL (video-edit uchun)"},
         "label": {"type": "string", "description": "Qisqa o'zbekcha nom"},
     },
     "required": ["kind", "model", "prompt", "label"],
@@ -728,6 +808,11 @@ Ishonch — eng qimmat aktiv. TAQIQLANADI: soxta shoshiltirish ("faqat bugun!"),
 3. Generatsiya promptlari professional INGLIZ tilida; foydalanuvchiga javob va tushuntirish esa {lang_name}.
 4. Seedance filtri: shubhali so'zlarni neytral sinonimlarga almashtir ("fight" → "dynamic action choreography"). Bola, mashhur shaxs, brend logotipi bilan xavfli so'rovlarni rad et.
 5. Referens rasmlar: foydalanuvchi rasm biriktirsa, URL xabar ichida [BIRIKTIRILGAN RASM: ...] ko'rinishida keladi — uni reference_urls'ga qo'sh va promptda @image1 sifatida ishlat. Motion transfer: @video1 = faqat harakat, @image1 = qiyofa/uslub, NEGATIVE promptda vizual aralashuvni taqiqla.
+5v. VIDEO TAHRIR (juda muhim): foydalanuvchi VIDEO biriktirsa — [BIRIKTIRILGAN VIDEO: ...] keladi va senga videodan bitta KADR ko'rsatiladi (nima borligini ko'r). Bu ko'p hollarda VIDEO TAHRIR so'rovi:
+   • Video ustida ish (obyekt/element qo'shish yoki olib tashlash, uslubni o'zgartirish/restayl, fonni almashtirish, mahsulot joylashtirish, matn/logo qo'shish) → model "gemini-omni" (Gemini Omni Video Edit — BIRINCHI TANLOV). Natija nisbati va uzunligi manba videoga ergashadi — sen duration/resolution/aspect HAQIDA O'YLAMA, tizim o'zi hal qiladi.
+   • MOTION TRANSFER (videoning harakatini boshqa qiyofaga ko'chirish, @video1=harakat + @image1=qiyofa) → "seedance-2.0".
+   • Oddiy image→video (bitta rasmdan jonlantirish) → "kling-3.0" yoki "seedance-2.0".
+   Prompt ANIQ va professional INGLIZ tilida bo'lsin: NIMA o'zgartirilishini aniq yoz (masalan "add a red sports car in the background, keep the person unchanged" / "restyle to anime, preserve motion" / "replace background with a modern office"). Video URL'ni O'ZING yozishing shart emas — tizim avtomatik biriktiradi.
 6. Narx/sifat balansi: oddiy ish uchun qimmat model taklif qilma, har doim arzon alternativani eslat.
 7. Katta g'oya → avval REJA (kadrlar + model + narx + jami), bitta tasdiq, keyin generate_batch bilan HAMMASI PARALLEL.
 8. Natijadan keyin qisqa tahlil + 50% chegirmali qayta-iteratsiya borligini eslat.
@@ -775,6 +860,8 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
         payload["duration"] = _safe_int(j.get("duration"), 5)
     if j.get("reference_urls"):
         payload["references"] = j["reference_urls"]
+    if j.get("video_url"):
+        payload["video_url"] = j["video_url"]      # video tahrir/motion manbasi
 
     async def on_progress(elapsed, pct):
         await emit("progress", {"label": label, "elapsed": elapsed, "pct": pct})
@@ -883,6 +970,13 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
                 cur = list(j.get("reference_urls") or [])
                 merged = list(dict.fromkeys(cur + sess.pending_refs))   # dedup, tartib saqlanadi
                 j["reference_urls"] = merged
+        # DETERMINISTIK VIDEO: video biriktirilgan bo'lsa, video jobs'ga avtomatik
+        # qo'shamiz (model unutmasin) + davomiylikni video uzunligiga tenglaymiz.
+        if sess.pending_video:
+            for j in jobs:
+                if j.get("kind") == "video" and not j.get("video_url"):
+                    j["video_url"] = sess.pending_video
+                    j["duration"] = sess.pending_video_dur   # natija manba videoga ergashadi
         # Kartada har-ish narxini KO'RSATISH + JAMI'ni SERVER hisoblaydi
         # (modelning inp["total"]'iga ishonmaymiz — chegirmada mos kelmasdi).
         jobs_priced = []
@@ -1169,6 +1263,7 @@ async def run_confirmed_generation(sess: "Session", emit):
                          {"jobs": q["jobs"], "is_iteration": bool(q.get("is_iteration"))},
                          sess, emit)
     sess.pending_refs = []               # referens ishlatildi — tozalaymiz
+    sess.pending_video = ""
     if out.get("error"):
         await emit("error", {"text": out["error"]})
         return
@@ -1262,14 +1357,33 @@ async def vagent_chat(body: ChatIn):
 
     _atts = [u for u in body.attachments[:4] if u]
     if _atts:
-        sess.pending_refs = _atts          # DETERMINISTIK: generatsiyada referens sifatida ishlatiladi
+        # RASM va VIDEO'ni ajratamiz (video-edit uchun video alohida)
+        _imgs = [u for u in _atts if not u.rsplit(".", 1)[-1].split("?")[0].lower() in ("mp4", "webm", "mov", "m4v")]
+        _vids = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() in ("mp4", "webm", "mov", "m4v")]
+        sess.pending_refs = _imgs
         _content = []
-        for url in _atts:
+        for url in _imgs:
             user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
             _b64, _mt = _vision_b64(url)
             if _b64:
                 _content.append({"type": "image",
                                  "source": {"type": "base64", "media_type": _mt, "data": _b64}})
+        if _vids:
+            vurl = _vids[0]
+            sess.pending_video = vurl
+            user_text += f"\n[BIRIKTIRILGAN VIDEO: {vurl} — foydalanuvchi VIDEO TAHRIR qilmoqchi bo'lishi mumkin]"
+            # (a) videodan 1 kadr olib Claude'ga ko'rsatamiz (nima tahrir kerakligini tushunsin)
+            try:
+                _vname = vurl.rstrip("/").split("/vagent/file/")[-1].split("?")[0]
+                _vpath = os.path.join(UPLOADS_DIR, _vname)
+                if os.path.exists(_vpath):
+                    sess.pending_video_dur = _video_duration(_vpath)
+                    _fb, _fm = _extract_frame_b64(_vpath)
+                    if _fb:
+                        _content.append({"type": "image",
+                                         "source": {"type": "base64", "media_type": _fm, "data": _fb}})
+            except Exception:
+                pass
         _content.append({"type": "text", "text": user_text})
         sess.messages.append({"role": "user", "content": _content})
     else:
@@ -1318,26 +1432,40 @@ async def vagent_chat(body: ChatIn):
                                       "X-Accel-Buffering": "no"})
 
 
+MAX_VIDEO_MB = 45   # video referens (≤30s) uchun kattaroq limit
+
+
 @vagent_router.post("/upload")
 async def vagent_upload(body: UploadIn):
-    """Referens rasm yuklash → public URL."""
+    """Referens RASM yoki VIDEO yuklash → public URL."""
     if not verify_auth(body.uid, body.exp, body.sig):
         return {"ok": False, "error": "auth"}
     try:
         raw = base64.b64decode(body.data_b64)
     except Exception:
         return {"ok": False, "error": "base64 xato"}
-    if len(raw) > MAX_UPLOAD_MB * 1024 * 1024:
-        return {"ok": False, "error": f"Fayl {MAX_UPLOAD_MB}MB dan katta"}
-    ext = {"image/png": "png", "image/webp": "webp"}.get(body.mime, "jpg")
+    is_video = (body.mime or "").startswith("video/")
+    limit = MAX_VIDEO_MB if is_video else MAX_UPLOAD_MB
+    if len(raw) > limit * 1024 * 1024:
+        return {"ok": False, "error": f"Fayl {limit}MB dan katta"}
+    if is_video:
+        ext = _MIME_VIDEO_EXT.get(body.mime, "mp4")
+    else:
+        ext = {"image/png": "png", "image/webp": "webp"}.get(body.mime, "jpg")
     name = f"{body.uid}_{uuid.uuid4().hex[:10]}.{ext}"
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    with open(os.path.join(UPLOADS_DIR, name), "wb") as f:
+    path = os.path.join(UPLOADS_DIR, name)
+    with open(path, "wb") as f:
         f.write(raw)
-    # INTEGRATSIYA: agar Atlas tashqi URL'ni qabul qilmasa, shu yerda
-    # botdagi atlas_upload_media funksiyasini chaqirib, Atlas URL qaytaring.
-    track(body.uid, "upload")
-    return {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}"}
+    track(body.uid, "upload_video" if is_video else "upload")
+    resp = {"ok": True, "url": f"{PUBLIC_BASE}/vagent/file/{name}", "kind": "video" if is_video else "image"}
+    if is_video:
+        dur = _video_duration(path)
+        if dur > 30:
+            os.remove(path)
+            return {"ok": False, "error": "Video 30 sekunddan uzun — qisqaroq yuklang"}
+        resp["duration"] = dur
+    return resp
 
 
 @vagent_router.get("/file/{name}")

@@ -291,7 +291,9 @@
     flex:none;
     border:1px solid var(--glass-border);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 6px 16px rgba(2,6,16,.4);}
-  .att-chip img{width:100%;height:100%;object-fit:cover;}
+  .att-chip img,.att-chip video{width:100%;height:100%;object-fit:cover;display:block;}
+  .att-chip .att-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    font-size:16px;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.7);pointer-events:none;}
   /* yuklanish paytida chip ustida spinner */
   .att-chip.loading::after{content:"";position:absolute;inset:0;
     background:rgba(6,10,18,.55);}
@@ -520,7 +522,7 @@
 <footer class="glass">
   <div id="attbar"></div>
   <div class="composer-row">
-    <input type="file" id="file" accept="image/*" multiple hidden>
+    <input type="file" id="file" accept="image/*,video/*" multiple hidden>
     <button class="icon-btn" id="attach" title="Rasm biriktirish"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5 12.6 20a5.4 5.4 0 0 1-7.6-7.6L13.8 3.6a3.6 3.6 0 0 1 5 5L10 17.4a1.8 1.8 0 0 1-2.5-2.5l8-8"/></svg></button>
     <button class="icon-btn" id="mic" title="Gapirib buyurish"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
     <textarea id="inp" rows="1" placeholder="G'oyangni yoz yoki gapir..."></textarea>
@@ -979,9 +981,13 @@ document.getElementById("attach").onclick=()=>fileInp.click();
 fileInp.onchange=async()=>{
   for(const f of fileInp.files){
     if(attachments.length>=4)break;
+    const isVid=(f.type||"").startsWith("video/");
     const b64=await new Promise(res=>{const r=new FileReader();
       r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(f);});
-    const chip=el(`<div class="att-chip loading"><img src="data:${f.type};base64,${b64}"><button class="x">${ic('x',11)}</button></div>`);
+    const inner=isVid
+      ? `<video src="data:${f.type};base64,${b64}" muted playsinline></video><span class="att-play">▶</span>`
+      : `<img src="data:${f.type};base64,${b64}">`;
+    const chip=el(`<div class="att-chip loading${isVid?' vid':''}">${inner}<button class="x">${ic('x',11)}</button></div>`);
     attbar.appendChild(chip);attbar.classList.add("show");
     const entry={url:null,elm:chip};attachments.push(entry);
     chip.querySelector(".x").onclick=()=>{attachments=attachments.filter(a=>a!==entry);chip.remove();
@@ -1054,8 +1060,11 @@ async function sendMsg(extra){
 
   if(!extra?.silent){
     let h=`<div class="msg user">${esc(text)}`;
-    attachments.forEach(a=>{const im=a.elm.querySelector("img");
-      if(im)h+=`<img class="att" src="${im.src}">`;});
+    attachments.forEach(a=>{
+      const im=a.elm.querySelector("img"), vd=a.elm.querySelector("video");
+      if(vd)h+=`<video class="att" src="${vd.src}" muted playsinline controls></video>`;
+      else if(im)h+=`<img class="att" src="${im.src}">`;
+    });
     h+="</div>";
     chat.appendChild(el(h));
     logAppend({t:"user",text:text,atts:atts});   // suhbatni saqlaymiz
