@@ -448,8 +448,19 @@ lucide-react/dist/esm/lucide-react.js:
   function calcPadb(){
     var dock=document.querySelector("nav.dock");
     if(!dock) return 0;
+    var cs=window.getComputedStyle(dock);
+    if(cs.display==="none" || cs.visibility==="hidden") return 0;   // Vagent'da dock yashirin — composer eng pastda
     var dr=dock.getBoundingClientRect();
     return Math.max(0,Math.round(window.innerHeight-dr.top)+14);
+  }
+  // Vagent ochilganda pastki sayt paneli (dock) yashiriladi — tugmalar uning ortiga berkinmaydi + joy ko'p
+  function setDock(hidden){
+    try{
+      var dock=document.querySelector("nav.dock");
+      if(!dock) return;
+      if(hidden){ if(!dock.hasAttribute("data-vgprev")) dock.setAttribute("data-vgprev", dock.style.display||""); dock.style.display="none"; }
+      else { dock.style.display=dock.getAttribute("data-vgprev")||""; dock.removeAttribute("data-vgprev"); }
+    }catch(e){}
   }
   // Server URL'ida lang=uz bo'lishi mumkin (u birinchi kelib qolsa qp.get uni oladi) — shuning uchun
   // eski lang'ni OLIB TASHLAB, sayt tilini (cookie) qo'shamiz. Til o'zgarsa applyFrame qayta yuklaydi.
@@ -485,7 +496,7 @@ lucide-react/dist/esm/lucide-react.js:
     else { b.style.color=""; b.style.background=""; b.style.boxShadow=""; }
   }
   function show(){
-    ensureOverlay(); position();
+    ensureOverlay(); setDock(true); position();   // dock yashiriladi → keyin position (padb=0)
     overlay.style.display="block"; shown=true; setActive(true);
     try{ if(location.hash!=="#vagent") history.replaceState(null,"","#vagent"); }catch(e){}  // refresh Vagent'da qolsin
     document.body.style.overflow="hidden";
@@ -494,7 +505,7 @@ lucide-react/dist/esm/lucide-react.js:
   }
   function hide(){
     if(overlay) overlay.style.display="none";
-    shown=false; setActive(false);
+    shown=false; setActive(false); setDock(false);   // dock qaytariladi
     try{ if(location.hash==="#vagent") history.replaceState(null,"",location.pathname+location.search); }catch(e){}
     document.body.style.overflow="";
     document.body.style.overscrollBehavior="";
@@ -536,6 +547,7 @@ lucide-react/dist/esm/lucide-react.js:
         nav.appendChild(b);
       }
       fixHome();
+      if(shown) setDock(true);   // React dock'ni qayta chizsa — Vagent ochiq bo'lsa yana yashiramiz
     }catch(e){}
   }
 
