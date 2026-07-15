@@ -926,6 +926,7 @@ function activeChat(){
 function logAppend(entry){
   const c=activeChat();
   c.log.push(entry); c.ts=Date.now();
+  if(c.log.length>160) c.log=c.log.slice(-160);   // localStorage to'lib jim to'xtamasin (server 120 saqlaydi)
   if(!c.title && entry.t==="user" && entry.text) c.title=entry.text.slice(0,42);
   CHATS=[c,...CHATS.filter(x=>x.id!==c.id)];
   saveChats();

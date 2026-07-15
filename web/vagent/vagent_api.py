@@ -1293,8 +1293,20 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
                 return {"error": _t(sess.lang, "balance_low", have=get_balance(uid), need=total)}
 
             await emit("status", {"text": _t(sess.lang, "jobs_started", n=len(priced), total=total)})
-            results = await asyncio.gather(
-                *[_run_single_job(sess, j, p, emit) for j, p in priced])
+            # return_exceptions=True: bir ish KUTILMAGAN xato bersa ham, boshqalari davom etadi +
+            # o'sha ishning pulini QAYTARAMIZ (aks holda pul yo'qolar + pending_quote qolib 2x to'lov bo'lardi)
+            _raw = await asyncio.gather(
+                *[_run_single_job(sess, j, p, emit) for j, p in priced],
+                return_exceptions=True)
+            results = []
+            for (j, p), r in zip(priced, _raw):
+                if isinstance(r, Exception):
+                    refund_credits(uid, p)                       # kutilmagan xato — pulni qaytaramiz
+                    print(f"[gen exception] {j.get('label')}: {r}")
+                    results.append({"status": "failed", "label": j.get("label"),
+                                    "kind": j.get("kind"), "error": "internal", "price": p})
+                else:
+                    results.append(r)
         finally:
             _release_jobs(uid, len(jobs))
 
