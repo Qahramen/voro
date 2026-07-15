@@ -693,12 +693,14 @@ async def atlas_create_job(kind: str, model: str, payload: dict) -> str:
     model_id = _atlas_model_id(model, kind, len(refs), has_video=bool(video_ref))
     endpoint = "generateImage" if kind == "image" else "generateVideo"
     is_video_edit = "video-edit" in model_id
+    # REFERENSLI RASM TAHRIRI: aspect_ratio YUBORILMAYDI — u gpt-image-2/edit'ni qayta kadrlashga
+    # majbur qilib, referens YUZINI buzadi (natija boshqa odam bo'lib qoladi). Referens o'lchamiga ergashsin.
+    is_img_edit = (kind == "image" and bool(refs))
     body = {"model": model_id, "prompt": payload.get("prompt", "")}
-    # VIDEO-EDIT: resolution/duration/aspect YUBORILMAYDI — natija manba videoga ergashadi
     if not is_video_edit:
         if payload.get("negative_prompt"):
             body["negative_prompt"] = payload["negative_prompt"]
-        if payload.get("aspect_ratio"):
+        if payload.get("aspect_ratio") and not is_img_edit:
             body["aspect_ratio"] = payload["aspect_ratio"]
         if kind == "video":
             body["resolution"] = payload.get("resolution", "720p")
