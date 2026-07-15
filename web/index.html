@@ -548,6 +548,22 @@ lucide-react/dist/esm/lucide-react.js:
     if(b.classList.contains("tap")||b.classList.contains("dock-item")) hide();
   }, true);
 
+  // Favicon — browser URL panelida voro.uz logosi (V) ko'rinsin
+  function setFavicon(){
+    try{
+      var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+        +'<rect width="32" height="32" rx="8" fill="#0A0D14"/>'
+        +'<path d="M8 9 L16 23 L24 9" fill="none" stroke="#2BD4FF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>'
+        +'</svg>';
+      var href="data:image/svg+xml,"+encodeURIComponent(svg);
+      [].slice.call(document.querySelectorAll('link[rel~="icon"],link[rel="shortcut icon"]')).forEach(function(l){ l.parentNode&&l.parentNode.removeChild(l); });
+      var fav=document.createElement("link");
+      fav.rel="icon"; fav.type="image/svg+xml"; fav.href=href;
+      document.head.appendChild(fav);
+    }catch(e){}
+  }
+  setFavicon();
+
   var obs=new MutationObserver(addNav);
   obs.observe(document.body,{childList:true,subtree:true});
   addNav();

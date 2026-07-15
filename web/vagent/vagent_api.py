@@ -306,16 +306,24 @@ def chats_read(user_id: str) -> list:
 
 def chats_write(user_id: str, chats: list) -> None:
     def fn(box):
-        # eng ko'pi 30 suhbat, har birida eng ko'pi 120 yozuv (fayl shishmasin)
-        clean = []
-        for c in (chats or [])[:30]:
-            if not isinstance(c, dict):
+        # MUHIM: ALMASHTIRMAYMIZ, BIRLASHTIRAMIZ — aks holda bir qurilma (web)
+        # ikkinchisining (mobil) suhbatlarini o'chirib yuborardi. id bo'yicha
+        # birlashtiramiz, yangi ts g'olib.
+        existing = {}
+        for c in box.get(str(user_id), []):
+            if isinstance(c, dict) and c.get("id"):
+                existing[str(c["id"])] = c
+        for c in (chats or [])[:60]:
+            if not isinstance(c, dict) or not c.get("id"):
                 continue
-            clean.append({"id": str(c.get("id", ""))[:40],
-                          "title": str(c.get("title", ""))[:80],
-                          "ts": int(c.get("ts", 0) or 0),
-                          "log": (c.get("log") or [])[-120:]})
-        box[str(user_id)] = clean
+            cid = str(c.get("id", ""))[:40]
+            clean = {"id": cid, "title": str(c.get("title", ""))[:80],
+                     "ts": int(c.get("ts", 0) or 0), "log": (c.get("log") or [])[-120:]}
+            prev = existing.get(cid)
+            if not prev or clean["ts"] >= int(prev.get("ts", 0) or 0):
+                existing[cid] = clean          # yangi ts g'olib
+        merged = sorted(existing.values(), key=lambda x: int(x.get("ts", 0) or 0), reverse=True)[:30]
+        box[str(user_id)] = merged
         return True
     _locked_update(CHATS_JSON, {}, fn)
 
