@@ -915,9 +915,9 @@ TOOLS = [
 # ============================================================
 
 _LANG_RULE = {
-    "uz": "Foydalanuvchi QAYSI TILDA yozsa — HAR safar o'sha tilda javob ber (o'zbekcha lotin / ruscha / inglizcha). Til aniq bo'lmasa: o'zbekcha (lotin). MUHIM: tillarni ARALASHTIRMA — javobingdagi HAR bir so'z (shu jumladan present_options TUGMA yozuvlari va tasdiq matni) BITTA tilda bo'lsin, boshqa tildan bitta ham so'z qo'shma.",
-    "ru": "Отвечай на ТОМ ЖЕ языке, на котором пишет пользователь в КАЖДОМ сообщении (узбекский-латиница / русский / английский). Если язык неясен — на русском. ВАЖНО: НЕ смешивай языки — КАЖДОЕ слово в ответе (включая надписи на кнопках present_options и текст подтверждения) на ОДНОМ языке, ни одного слова из другого языка.",
-    "en": "Reply in the SAME language the user writes in, per message (Uzbek-latin / Russian / English). If unclear — in English. IMPORTANT: NEVER mix languages — every word in your reply (including present_options BUTTON labels and confirmation text) must be in ONE single language, not a single word from another language.",
+    "uz": "Foydalanuvchi tanlagan interfeys tili — O'ZBEKCHA. DEFAULT: HAMMA javobни o'zbekcha (lotin) yoz. Faqat foydalanuvchi to'liq xabarni ANIQ boshqa tilda (ruscha yoki inglizcha) yozsagina o'sha tilга o't. Rasm biriktirса, qisqa yoki noaniq xabar bo'lsa — DOIM o'zbekcha. HECH QACHON tillarni ARALASHTIRMA: javobingdagi HAR bir so'z (present_options TUGMA yozuvlari va tasdiq matni ham) BITTA tilda bo'lsin.",
+    "ru": "Выбранный язык интерфейса — РУССКИЙ. ПО УМОЛЧАНИЮ отвечай на ВСЁ по-русски. Переходи на другой язык ТОЛЬКО если пользователь целым сообщением явно пишет на другом языке (узбекский-латиница или английский). Если прикреплено фото, сообщение короткое или неясное — ВСЕГДА по-русски. НИКОГДА не смешивай языки: КАЖДОЕ слово в ответе (включая надписи на кнопках present_options и текст подтверждения) на ОДНОМ языке.",
+    "en": "The selected interface language is ENGLISH. By DEFAULT reply to everything in English. Switch languages ONLY if the user writes a full message clearly in another language (Uzbek-latin or Russian). If a photo is attached, or the message is short or unclear — ALWAYS English. NEVER mix languages: every word in your reply (including present_options BUTTON labels and confirmation text) must be in ONE single language.",
 }
 
 
@@ -1400,6 +1400,7 @@ _UI = {
     "bad_image": {"uz": "Rasmni o'qib bo'lmadi — iltimos, boshqa rasm (JPG yoki PNG) yuboring.",
                   "ru": "Не удалось обработать изображение — пришлите другое (JPG или PNG).",
                   "en": "Couldn't read the image — please send another one (JPG or PNG)."},
+    "hi": {"uz": "Salom!", "ru": "Привет!", "en": "Hi!"},
     "confirm_yes": {"uz": "✅ Ha, roziman, boshla!",
                     "ru": "✅ Да, согласен, начинай!",
                     "en": "✅ Yes, go ahead!"},
@@ -1611,7 +1612,7 @@ async def vagent_chat(body: ChatIn):
         sess.pending_quote, sess.confirmed_token = None, None
         user_text = _t(sess.lang, "decline_no")
     else:
-        user_text = body.message.strip() or "Salom!"
+        user_text = body.message.strip() or _t(sess.lang, "hi")
         track(body.uid, "msg")
 
     _vext = ("mp4", "webm", "mov", "m4v")

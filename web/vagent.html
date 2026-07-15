@@ -815,7 +815,14 @@ window.addEventListener("pagehide", revokeAllObj);
 const progRows = {};
 
 function el(h){const d=document.createElement("div");d.innerHTML=h.trim();return d.firstChild;}
-function scrollDown(){chat.scrollTop=chat.scrollHeight;}
+function scrollDown(){
+  // layout REFLOW'dan keyin scroll (birinchi renderда tugma berkinmasin) + qayta o'lchov
+  if(typeof measureComposer==="function") measureComposer();
+  requestAnimationFrame(function(){
+    chat.scrollTop=chat.scrollHeight;
+    setTimeout(function(){ chat.scrollTop=chat.scrollHeight; }, 60);
+  });
+}
 function hideEmpty(){document.getElementById("empty")?.remove();}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function md(s){
@@ -1026,14 +1033,20 @@ boot();
 
 // ===== COMPOSER balandligini o'lchab #chat pastki bo'shlig'ini moslaymiz =====
 // (tugmalar/natijalar pastki panel va sayt bari ortiga yashirinib qolmasin)
+function measureComposer(){
+  var footer=document.querySelector("footer");
+  if(footer) document.documentElement.style.setProperty("--composerh", Math.max(64,Math.round(footer.offsetHeight))+"px");
+}
 (function(){
   var footer=document.querySelector("footer");
   if(!footer) return;
-  function setCH(){ document.documentElement.style.setProperty("--composerh", Math.max(64,Math.round(footer.offsetHeight))+"px"); }
-  setCH();
-  if(window.ResizeObserver){ try{ new ResizeObserver(setCH).observe(footer); }catch(e){} }  // attach chip qo'shilsa ham yangilanadi
-  window.addEventListener("resize", setCH);
-  if(window.visualViewport) window.visualViewport.addEventListener("resize", setCH);
+  measureComposer();
+  // BIRINCHI yuklashda layout kech tayyor bo'ladi — bir necha marta qayta o'lchaymiz (tugma berkinmasin)
+  requestAnimationFrame(measureComposer);
+  [120,400,900].forEach(function(t){ setTimeout(measureComposer,t); });
+  if(window.ResizeObserver){ try{ new ResizeObserver(measureComposer).observe(footer); }catch(e){} }
+  window.addEventListener("resize", measureComposer);
+  if(window.visualViewport) window.visualViewport.addEventListener("resize", measureComposer);
 })();
 
 // ===== OVERSCROLL guard: chat qisqa bo'lsa (yoki chekkada) orqa fon/sayt scroll bo'lmasin (iOS bounce) =====
