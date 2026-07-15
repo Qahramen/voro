@@ -505,6 +505,7 @@ class Session:
         self.pending_quote: Optional[dict] = None
         self.confirmed_token: Optional[str] = None
         self.run_confirmed: bool = False   # tasdiqdan keyin generatsiyani DETERMINISTIK boshlash
+        self.pending_refs: list[str] = []  # foydalanuvchi biriktirgan referens rasmlar (deterministik)
         self.last_jobs: list[dict] = []
         self.active_jobs = 0
         self.updated = time.time()
@@ -722,7 +723,7 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
     # so'rovga "Request parameters are invalid" kabi VAQTINCHALIK xato beradi.
     # Foydalanuvchiga xato ko'rsatishdan oldin jimgina 2-3 marta qayta urinamiz.
     _retry_msg = {"uz": "Qayta urinyapman…", "ru": "Пробую ещё раз…", "en": "Retrying…"}
-    max_attempts = 3 if j["kind"] == "image" else 2
+    max_attempts = 4 if j["kind"] == "image" else 2   # nano-banana flakiness yuqori
     result, last_err = None, None
     for attempt in range(1, max_attempts + 1):
         try:
@@ -792,10 +793,18 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
     if name == "request_confirmation":
         token = uuid.uuid4().hex[:12]
         it = bool(inp.get("is_iteration", False))
-        # Kartada har-ish narxini KO'RSATISH uchun oldindan hisoblaymiz
-        # (aks holda frontend'da "?" chiqib qolardi).
+        # DETERMINISTIK REFERENS: foydalanuvchi rasm biriktirgan bo'lsa, model
+        # uni reference_urls'ga qo'shishni unutsa ham — biz avtomatik qo'shamiz.
+        # (Aks holda generatsiya text-to-image bo'lib, referens ishtirok etmasdi.)
+        jobs = [dict(j) for j in inp["jobs"]]
+        if sess.pending_refs:
+            for j in jobs:
+                cur = list(j.get("reference_urls") or [])
+                merged = list(dict.fromkeys(cur + sess.pending_refs))   # dedup, tartib saqlanadi
+                j["reference_urls"] = merged
+        # Kartada har-ish narxini KO'RSATISH uchun oldindan hisoblaymiz.
         jobs_priced = []
-        for j in inp["jobs"]:
+        for j in jobs:
             p = calc_price(j.get("kind", "image"), j.get("model", ""),
                            j.get("resolution", "720p"), int(j.get("duration", 5) or 5))
             if p is not None and it:
@@ -804,7 +813,7 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
             jj["price"] = p
             jobs_priced.append(jj)
         sess.pending_quote = {"token": token, "total": int(inp["total"]),
-                              "jobs": inp["jobs"], "is_iteration": it}
+                              "jobs": jobs, "is_iteration": it}
         sess.confirmed_token = None
         track(uid, "quote_shown", {"total": int(inp["total"])})
         await emit("confirm", {"token": token, "summary": inp["summary"],
@@ -1075,6 +1084,7 @@ async def run_confirmed_generation(sess: "Session", emit):
     out = await run_tool("generate_batch",
                          {"jobs": q["jobs"], "is_iteration": bool(q.get("is_iteration"))},
                          sess, emit)
+    sess.pending_refs = []               # referens ishlatildi — tozalaymiz
     if out.get("error"):
         await emit("error", {"text": out["error"]})
         return
@@ -1164,6 +1174,7 @@ async def vagent_chat(body: ChatIn):
 
     _atts = [u for u in body.attachments[:4] if u]
     if _atts:
+        sess.pending_refs = _atts          # DETERMINISTIK: generatsiyada referens sifatida ishlatiladi
         _content = []
         for url in _atts:
             user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
