@@ -1772,128 +1772,129 @@ async def vagent_chat(body: ChatIn):
 
     sess = await get_session(body.uid, body.chat_id)
     sess.lang = (body.lang or "uz") if body.lang in ("uz","ru","en") else "uz"
-    # KONTEKST TIKLASH: server restart/boshqa qurilma tufayli session bo'sh bo'lsa,
-    # saqlangan chat log'idan suhbat kontekstini tiklaymiz (agent unutmaydi).
-    if not sess.messages and body.chat_id and not body.confirm_token:
-        sess.messages = rebuild_messages(body.uid, body.chat_id)
-
-    # Foydalanuvchi tugma o'rniga "ha"/"да"/"yes" deb YOZSA ham tasdiq deb qabul qilamiz
-    _affirm = {"ha", "xa", "haa", "yes", "yeah", "yep", "ok", "okay", "okey",
-               "boshla", "roziman", "davom", "давай", "да", "ага", "хорошо", "го", "go"}
-    _msg_norm = (body.message or "").strip().lower().strip("!.,?)( ")
-    _typed_yes = (not body.confirm_token and not body.decline and sess.pending_quote
-                  and _msg_norm in _affirm)
-
-    if (body.confirm_token and sess.pending_quote and
-            body.confirm_token == sess.pending_quote["token"]) or _typed_yes:
-        sess.confirmed_token = sess.pending_quote["token"]
-        sess.run_confirmed = True   # worker LLM'ni emas, generatsiyani ishga tushiradi
-        track(body.uid, "confirmed", {"total": sess.pending_quote["total"]})
-        user_text = _t(sess.lang, "confirm_yes")
-    elif body.decline:
-        track(body.uid, "declined",
-              {"total": sess.pending_quote["total"] if sess.pending_quote else 0})
-        sess.pending_quote, sess.confirmed_token = None, None
-        user_text = _t(sess.lang, "decline_no")
-    else:
-        user_text = body.message.strip() or _t(sess.lang, "hi")
-        track(body.uid, "msg")
-
-    _vext = ("mp4", "webm", "mov", "m4v")
-    _atts = [u for u in body.attachments[:4] if u]
-    # RASM va VIDEO'ni ajratamiz (video-edit uchun video alohida)
-    _imgs = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() not in _vext]
-    _vids = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() in _vext]
-    # YOPISHQOQ VIDEO: yangi video biriktirilmagan bo'lsa-yu, frontend suhbatdagi video URL'ni
-    # qayta yuborsa — server restart / boshqa qurilma bo'lsa ham agent videoni UNUTMAYDI.
-    _sticky_vid = bool(body.pending_video and not _vids)
-    if _sticky_vid:
-        _vids = [body.pending_video.strip()]
-
-    # YOPISHQOQ REFERENS RASM: yangi rasm biriktirilmagan bo'lsa-yu frontend suhbatdagi referens
-    # URL(lar)ni qayta yuborsa — server restart / boshqa qurilma bo'lsa ham referens rasm
-    # generatsiyaga YETIB BORADI (aks holda text-to-image bo'lib, o'xshamas natija chiqardi).
-    _sticky_refs = [u for u in (body.pending_refs or [])[:4] if u] if not _imgs else []
-    # BOSHQA QURILMA: sticky ham, biriktirilgan rasm ham yo'q bo'lsa — saqlangan log'dan tiklaymiz
-    if not _imgs and not _sticky_refs and not sess.pending_refs:
-        _log_refs = _pending_refs_from_log(body.uid, body.chat_id)
-        if _log_refs:
-            _sticky_refs = _log_refs
-
-    _content = []
-    if _imgs:
-        sess.pending_refs = _imgs
-        sess.refs_shown = False
-        for url in _imgs:
-            user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
-            _b64, _mt = await asyncio.get_event_loop().run_in_executor(None, _vision_b64, url)
-            if _b64:
-                _content.append({"type": "image",
-                                 "source": {"type": "base64", "media_type": _mt, "data": _b64}})
-        sess.refs_shown = True
-    elif _sticky_refs:
-        sess.pending_refs = _sticky_refs
-        user_text += f"\n[SUHBATDAGI RASM referens sifatida ishlatiladi: {', '.join(_sticky_refs)} — generatsiyada shu rasmni ASOS qil]"
-        if not sess.refs_shown:                 # rebuild'dan keyin — agent rasmni bir marta ko'rsin
-            for url in _sticky_refs:
-                _b64, _mt = await asyncio.get_event_loop().run_in_executor(None, _vision_b64, url)
-                if _b64:
-                    _content.append({"type": "image",
-                                     "source": {"type": "base64", "media_type": _mt, "data": _b64}})
-            sess.refs_shown = True
-    if _vids:
-        vurl = _vids[0]
-        if not _sticky_vid and vurl != sess.pending_video:
-            sess.video_frame_shown = False   # YANGI video biriktirildi — uning kadrini albatta ko'rsatamiz
-        sess.pending_video = vurl
-        if _sticky_vid:
-            user_text += f"\n[SUHBATDAGI VIDEO (tahrirlanmoqda): {vurl} — bu videoni ishlat, qayta so'rama]"
-        else:
-            user_text += f"\n[BIRIKTIRILGAN VIDEO: {vurl} — foydalanuvchi VIDEO TAHRIR qilmoqchi bo'lishi mumkin]"
-        # (a) videodan 1 kadr olib Claude'ga BIR MARTA ko'rsatamiz (kontekstni shishirmaslik uchun keshdan).
-        # rebuild'dan keyin video_frame_shown=False bo'ladi → kadr qayta ko'rsatiladi (agent ko'radi).
-        _fb, _fm, _dur = await asyncio.get_event_loop().run_in_executor(None, _video_frame_cached, vurl)
-        if _dur:
-            sess.pending_video_dur = _dur
-        if _fb and not sess.video_frame_shown:
-            _content.append({"type": "image",
-                             "source": {"type": "base64", "media_type": _fm, "data": _fb}})
-            sess.video_frame_shown = True
-    if _content:
-        _content.append({"type": "text", "text": user_text})
-        sess.messages.append({"role": "user", "content": _content})
-    else:
-        sess.messages.append({"role": "user", "content": user_text})
-    if len(sess.messages) > 48:            # suhbat davomida to'liq xotira (chalkashlik bo'lmasin)
-        sess.messages = sess.messages[-48:]
-        while sess.messages and (
-            sess.messages[0]["role"] != "user" or
-            (isinstance(sess.messages[0].get("content"), list) and
-             any(b.get("type") == "tool_result" for b in sess.messages[0]["content"]))):
-            sess.messages.pop(0)
 
     queue: asyncio.Queue = asyncio.Queue()
 
     async def emit(event, data):
         await queue.put((event, data))
 
+    async def _prepare():
+        # KONTEKST TIKLASH: server restart/boshqa qurilma tufayli session bo'sh bo'lsa,
+        # saqlangan chat log'idan suhbat kontekstini tiklaymiz (agent unutmaydi).
+        if not sess.messages and body.chat_id and not body.confirm_token:
+            sess.messages = rebuild_messages(body.uid, body.chat_id)
+
+        # Foydalanuvchi tugma o'rniga "ha"/"да"/"yes" deb YOZSA ham tasdiq deb qabul qilamiz
+        _affirm = {"ha", "xa", "haa", "yes", "yeah", "yep", "ok", "okay", "okey",
+                   "boshla", "roziman", "davom", "давай", "да", "ага", "хорошо", "го", "go"}
+        _msg_norm = (body.message or "").strip().lower().strip("!.,?)( ")
+        _typed_yes = (not body.confirm_token and not body.decline and sess.pending_quote
+                      and _msg_norm in _affirm)
+
+        if (body.confirm_token and sess.pending_quote and
+                body.confirm_token == sess.pending_quote["token"]) or _typed_yes:
+            sess.confirmed_token = sess.pending_quote["token"]
+            sess.run_confirmed = True   # worker LLM'ni emas, generatsiyani ishga tushiradi
+            track(body.uid, "confirmed", {"total": sess.pending_quote["total"]})
+            user_text = _t(sess.lang, "confirm_yes")
+        elif body.decline:
+            track(body.uid, "declined",
+                  {"total": sess.pending_quote["total"] if sess.pending_quote else 0})
+            sess.pending_quote, sess.confirmed_token = None, None
+            user_text = _t(sess.lang, "decline_no")
+        else:
+            user_text = body.message.strip() or _t(sess.lang, "hi")
+            track(body.uid, "msg")
+
+        _vext = ("mp4", "webm", "mov", "m4v")
+        _atts = [u for u in body.attachments[:4] if u]
+        # RASM va VIDEO'ni ajratamiz (video-edit uchun video alohida)
+        _imgs = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() not in _vext]
+        _vids = [u for u in _atts if u.rsplit(".", 1)[-1].split("?")[0].lower() in _vext]
+        # YOPISHQOQ VIDEO: yangi video biriktirilmagan bo'lsa-yu, frontend suhbatdagi video URL'ni
+        # qayta yuborsa — server restart / boshqa qurilma bo'lsa ham agent videoni UNUTMAYDI.
+        _sticky_vid = bool(body.pending_video and not _vids)
+        if _sticky_vid:
+            _vids = [body.pending_video.strip()]
+
+        # YOPISHQOQ REFERENS RASM: yangi rasm biriktirilmagan bo'lsa-yu frontend suhbatdagi referens
+        # URL(lar)ni qayta yuborsa — server restart / boshqa qurilma bo'lsa ham referens rasm
+        # generatsiyaga YETIB BORADI (aks holda text-to-image bo'lib, o'xshamas natija chiqardi).
+        _sticky_refs = [u for u in (body.pending_refs or [])[:4] if u] if not _imgs else []
+        # BOSHQA QURILMA: sticky ham, biriktirilgan rasm ham yo'q bo'lsa — saqlangan log'dan tiklaymiz
+        if not _imgs and not _sticky_refs and not sess.pending_refs:
+            _log_refs = _pending_refs_from_log(body.uid, body.chat_id)
+            if _log_refs:
+                _sticky_refs = _log_refs
+
+        _content = []
+        if _imgs:
+            sess.pending_refs = _imgs
+            sess.refs_shown = False
+            for url in _imgs:
+                user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
+                _b64, _mt = await asyncio.get_event_loop().run_in_executor(None, _vision_b64, url)
+                if _b64:
+                    _content.append({"type": "image",
+                                     "source": {"type": "base64", "media_type": _mt, "data": _b64}})
+            sess.refs_shown = True
+        elif _sticky_refs:
+            sess.pending_refs = _sticky_refs
+            user_text += f"\n[SUHBATDAGI RASM referens sifatida ishlatiladi: {', '.join(_sticky_refs)} — generatsiyada shu rasmni ASOS qil]"
+            if not sess.refs_shown:                 # rebuild'dan keyin — agent rasmni bir marta ko'rsin
+                for url in _sticky_refs:
+                    _b64, _mt = await asyncio.get_event_loop().run_in_executor(None, _vision_b64, url)
+                    if _b64:
+                        _content.append({"type": "image",
+                                         "source": {"type": "base64", "media_type": _mt, "data": _b64}})
+                sess.refs_shown = True
+        if _vids:
+            vurl = _vids[0]
+            if not _sticky_vid and vurl != sess.pending_video:
+                sess.video_frame_shown = False   # YANGI video biriktirildi — uning kadrini albatta ko'rsatamiz
+            sess.pending_video = vurl
+            if _sticky_vid:
+                user_text += f"\n[SUHBATDAGI VIDEO (tahrirlanmoqda): {vurl} — bu videoni ishlat, qayta so'rama]"
+            else:
+                user_text += f"\n[BIRIKTIRILGAN VIDEO: {vurl} — foydalanuvchi VIDEO TAHRIR qilmoqchi bo'lishi mumkin]"
+            # (a) videodan 1 kadr olib Claude'ga BIR MARTA ko'rsatamiz (kontekstni shishirmaslik uchun keshdan).
+            # rebuild'dan keyin video_frame_shown=False bo'ladi → kadr qayta ko'rsatiladi (agent ko'radi).
+            _fb, _fm, _dur = await asyncio.get_event_loop().run_in_executor(None, _video_frame_cached, vurl)
+            if _dur:
+                sess.pending_video_dur = _dur
+            if _fb and not sess.video_frame_shown:
+                _content.append({"type": "image",
+                                 "source": {"type": "base64", "media_type": _fm, "data": _fb}})
+                sess.video_frame_shown = True
+        if _content:
+            _content.append({"type": "text", "text": user_text})
+            sess.messages.append({"role": "user", "content": _content})
+        else:
+            sess.messages.append({"role": "user", "content": user_text})
+        if len(sess.messages) > 48:            # suhbat davomida to'liq xotira (chalkashlik bo'lmasin)
+            sess.messages = sess.messages[-48:]
+            while sess.messages and (
+                sess.messages[0]["role"] != "user" or
+                (isinstance(sess.messages[0].get("content"), list) and
+                 any(b.get("type") == "tool_result" for b in sess.messages[0]["content"]))):
+                sess.messages.pop(0)
+
     async def worker():
         try:
-            # MUHIM: bir sessiyada bir vaqtda BITTA turn — 2x to'lov va
-            # xabarlar tarixining buzilishini (parallel worker) oldini oladi.
+            # BUTUN TURN (tayyorlash + qayta ishlash) BITTA lock ostida — tez ketma-ket
+            # so'rovlarda (bir user, 2 qurilma) sess.messages/holat buzilmaydi.
             async with sess.lock:
+                await _prepare()
                 if sess.run_confirmed:
                     sess.run_confirmed = False
                     await run_confirmed_generation(sess, emit)
                 else:
                     await claude_stream_turn(sess, emit)
-        except Exception as e:
+        except Exception:
             await emit("error", {"text": _t(getattr(sess, "lang", "uz"), "internal_error")})
         finally:
             await queue.put(("done", {}))
 
-    # MUHIM: worker mustaqil task — mijoz uzilsa HAM davom etadi.
-    # Natijalar inbox'ga yoziladi, Mini App /inbox orqali tiklaydi.
     asyncio.create_task(worker())
 
     async def streamer() -> AsyncGenerator[str, None]:
