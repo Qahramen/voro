@@ -472,7 +472,12 @@ async def atlas_poll_job(job_id: str, on_progress=None, timeout_sec: int = 900) 
                 await on_progress(int(time.time() - start), None)
             if st in ("completed", "succeeded", "success"):
                 outs = data.get("outputs") or []
-                return {"status": "ok", "url": (outs[0] if outs else "")}
+                url = outs[0] if outs else ""
+                # "completed" bo'lsa-yu URL bo'sh/yaroqsiz bo'lsa — MUVAFFAQIYATSIZ
+                # deb hisoblaymiz (aks holda user bo'sh natija uchun to'laydi).
+                if not (isinstance(url, str) and url.startswith("http")):
+                    return {"status": "failed", "error": "natija bo'sh qaytdi"}
+                return {"status": "ok", "url": url}
             if st in ("failed", "error", "canceled", "cancelled"):
                 return {"status": "failed", "error": data.get("error") or "noma'lum xato"}
             await asyncio.sleep(5)
@@ -481,6 +486,14 @@ async def atlas_poll_job(job_id: str, on_progress=None, timeout_sec: int = 900) 
 # ============================================================
 # NARX
 # ============================================================
+
+def _safe_int(v, default: int = 5) -> int:
+    """Modeldan kelgan qiymat matn/None/xato bo'lsa ham xato bermaydi."""
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return default
+
 
 def calc_price(kind: str, model: str, resolution: str = "720p", duration: int = 5) -> Optional[int]:
     try:
@@ -509,6 +522,7 @@ class Session:
         self.last_jobs: list[dict] = []
         self.active_jobs = 0
         self.updated = time.time()
+        self.lock = asyncio.Lock()         # bir sessiyada bir vaqtda BITTA turn (2x to'lov/buzilishning oldini oladi)
 
 # Oddiy rate-limit: 60 soniyada max 15 xabar / foydalanuvchi
 from collections import deque
@@ -719,7 +733,7 @@ async def _run_single_job(sess: Session, j: dict, price: int, emit) -> dict:
     }
     if j["kind"] == "video":
         payload["resolution"] = j.get("resolution", "720p")
-        payload["duration"] = int(j.get("duration", 5))
+        payload["duration"] = _safe_int(j.get("duration"), 5)
     if j.get("reference_urls"):
         payload["references"] = j["reference_urls"]
 
@@ -813,7 +827,7 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
         out, total = [], 0
         for j in inp.get("jobs", []):
             p = calc_price(j["kind"], j["model"], j.get("resolution", "720p"),
-                           int(j.get("duration", 5)))
+                           _safe_int(j.get("duration"), 5))
             out.append({**j, "price": p})
             total += p or 0
         return {"jobs": out, "total": total, "balance": get_balance(uid)}
@@ -830,22 +844,25 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
                 cur = list(j.get("reference_urls") or [])
                 merged = list(dict.fromkeys(cur + sess.pending_refs))   # dedup, tartib saqlanadi
                 j["reference_urls"] = merged
-        # Kartada har-ish narxini KO'RSATISH uchun oldindan hisoblaymiz.
+        # Kartada har-ish narxini KO'RSATISH + JAMI'ni SERVER hisoblaydi
+        # (modelning inp["total"]'iga ishonmaymiz — chegirmada mos kelmasdi).
         jobs_priced = []
+        computed_total = 0
         for j in jobs:
             p = calc_price(j.get("kind", "image"), j.get("model", ""),
-                           j.get("resolution", "720p"), int(j.get("duration", 5) or 5))
+                           j.get("resolution", "720p"), _safe_int(j.get("duration"), 5))
             if p is not None and it:
                 p = max(1, int(p * FREE_ITERATION_DISCOUNT))
             jj = dict(j)
             jj["price"] = p
             jobs_priced.append(jj)
-        sess.pending_quote = {"token": token, "total": int(inp["total"]),
+            computed_total += p or 0
+        sess.pending_quote = {"token": token, "total": computed_total,
                               "jobs": jobs, "is_iteration": it}
         sess.confirmed_token = None
-        track(uid, "quote_shown", {"total": int(inp["total"])})
+        track(uid, "quote_shown", {"total": computed_total})
         await emit("confirm", {"token": token, "summary": inp["summary"],
-                               "total": int(inp["total"]), "jobs": jobs_priced,
+                               "total": computed_total, "jobs": jobs_priced,
                                "balance": get_balance(uid)})
         return {"status": "waiting_user", "token": token}
 
@@ -877,7 +894,7 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
         priced = []
         for j in jobs:
             p = calc_price(j["kind"], j["model"], j.get("resolution", "720p"),
-                           int(j.get("duration", 5)))
+                           _safe_int(j.get("duration"), 5))
             if p is None:
                 return {"error": f"'{j.get('label')}' uchun narx hisoblanmadi."}
             if inp.get("is_iteration"):
@@ -1179,7 +1196,7 @@ async def vagent_chat(body: ChatIn):
     sess.lang = (body.lang or "uz") if body.lang in ("uz","ru","en") else "uz"
 
     # Foydalanuvchi tugma o'rniga "ha"/"да"/"yes" deb YOZSA ham tasdiq deb qabul qilamiz
-    _affirm = {"ha", "xa", " haa", "haa", "yes", "yeah", "yep", "ok", "okay", "okey",
+    _affirm = {"ha", "xa", "haa", "yes", "yeah", "yep", "ok", "okay", "okey",
                "boshla", "roziman", "davom", "давай", "да", "ага", "хорошо", "го", "go"}
     _msg_norm = (body.message or "").strip().lower().strip("!.,?)( ")
     _typed_yes = (not body.confirm_token and not body.decline and sess.pending_quote
@@ -1229,11 +1246,14 @@ async def vagent_chat(body: ChatIn):
 
     async def worker():
         try:
-            if sess.run_confirmed:
-                sess.run_confirmed = False
-                await run_confirmed_generation(sess, emit)
-            else:
-                await claude_stream_turn(sess, emit)
+            # MUHIM: bir sessiyada bir vaqtda BITTA turn — 2x to'lov va
+            # xabarlar tarixining buzilishini (parallel worker) oldini oladi.
+            async with sess.lock:
+                if sess.run_confirmed:
+                    sess.run_confirmed = False
+                    await run_confirmed_generation(sess, emit)
+                else:
+                    await claude_stream_turn(sess, emit)
         except Exception as e:
             await emit("error", {"text": f"Ichki xato: {e}"})
         finally:
@@ -1306,8 +1326,9 @@ async def vagent_img(u: str, request: Request):
         return {"ok": False, "error": "bad url"}
     if p.scheme != "https" or (p.hostname or "") not in _MEDIA_HOSTS:
         return {"ok": False, "error": "host not allowed"}
+    # follow_redirects=False — redirect orqali SSRF (ichki manzilga) bo'lmasin
+    client = httpx.AsyncClient(timeout=90, follow_redirects=False)
     try:
-        client = httpx.AsyncClient(timeout=90, follow_redirects=True)
         fwd = {}
         rng = request.headers.get("range")
         if rng:
@@ -1340,6 +1361,7 @@ async def vagent_img(u: str, request: Request):
         return StreamingResponse(body(), status_code=r.status_code,
                                  media_type=ctype, headers=out)
     except Exception as e:
+        await client.aclose()          # xatoда ham client yopilsin (leak yo'q)
         return {"ok": False, "error": str(e)[:150]}
 
 

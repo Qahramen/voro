@@ -569,9 +569,9 @@ window.addEventListener("message",function(e){
   if(e&&e.data&&e.data.t==="vgpadb") applyPadb(e.data.v);
 });
 const I18N = {
-  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans", thinking:"O'ylayapman", new_chat:"Yangi", history:"Suhbatlar", no_chats:"Hali suhbat yo'q" },
-  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс", thinking:"Думаю", new_chat:"Новый", history:"Диалоги", no_chats:"Пока нет диалогов" },
-  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance", thinking:"Thinking", new_chat:"New", history:"Chats", no_chats:"No chats yet" },
+  uz: { greeting:"Salom! Men Vagent", sub:"G'oyangni yoz yoki gapir — reja tuzaman, narxini aytaman, sen tasdiqlasang — yasayman. Rasmingni biriktirsang, seni videoga qo'shaman!", chips:["Do'konim uchun reklama video","Meni futbolchi qilib chizib ber","Tug'ilgan kun tabrigi","3 qismli Instagram storiya"], ph:"G'oyangni yoz yoki gapir...", attach:"Rasm biriktirish", mic:"Gapirib buyurish", yes:"Ha, boshla", no:"Yo'q", cc_title:"Tasdiqlash kerak", total:"Jami", confirmed:"Tasdiqlandi", cancelled:"Bekor qilindi", bal_label:"Balans", thinking:"O'ylayapman", new_chat:"Yangi", history:"Suhbatlar", no_chats:"Hali suhbat yo'q", uploading:"Rasm yuklanmoqda…" },
+  ru: { greeting:"Привет! Я Vagent", sub:"Напиши или скажи идею — составлю план, назову цену, ты подтвердишь — сделаю. Прикрепи фото — добавлю тебя в видео!", chips:["Рекламное видео для магазина","Сделай меня футболистом","Видео-поздравление с днём рождения","Instagram-история из 3 частей"], ph:"Напиши или скажи идею...", attach:"Прикрепить фото", mic:"Голосовая команда", yes:"Да, начать", no:"Нет", cc_title:"Нужно подтверждение", total:"Итого", confirmed:"Подтверждено", cancelled:"Отменено", bal_label:"Баланс", thinking:"Думаю", new_chat:"Новый", history:"Диалоги", no_chats:"Пока нет диалогов", uploading:"Загрузка фото…" },
+  en: { greeting:"Hi! I'm Vagent", sub:"Type or speak your idea — I'll plan it, tell the price, and once you confirm — I'll create it. Attach your photo — I'll put you in the video!", chips:["Promo video for my store","Make me a footballer","Birthday greeting video","3-part Instagram story"], ph:"Type or speak your idea...", attach:"Attach image", mic:"Voice command", yes:"Yes, start", no:"No", cc_title:"Confirmation needed", total:"Total", confirmed:"Confirmed", cancelled:"Cancelled", bal_label:"Balance", thinking:"Thinking", new_chat:"New", history:"Chats", no_chats:"No chats yet", uploading:"Uploading photo…" },
 };
 let VT = I18N[AUTH.lang] || I18N.uz;
 function applyLang(){ try{
@@ -876,13 +876,15 @@ function showGreeting(){
   e.querySelectorAll('[data-robot]').forEach(n=>{n.innerHTML=ROBOT_SVG;});
 }
 function newChat(){
-  if(activeChat().log.length===0) return; // allaqachon bo'sh
+  if(busy){ closeHist(); return; }   // oqim ketayotganda almashtirmaymiz (natija boshqa chatga tushmasin)
+  if(activeChat().log.length===0){ closeHist(); return; } // allaqachon bo'sh
   CHAT_ID=newId();
   activeChat(); // yangi yozuv yaratadi
   clearChatUI(); showGreeting(); closeHist();
   progRows&&Object.keys(progRows).forEach(k=>delete progRows[k]);
 }
 function switchChat(id){
+  if(busy){ closeHist(); return; }   // oqim ketayotganda almashtirmaymiz
   CHAT_ID=id; clearChatUI();
   const c=activeChat();
   if(c.log.length) renderLog(c.log); else showGreeting();
@@ -929,7 +931,9 @@ async function boot(){
     const r=await fetch(`${API_BASE}/inbox?${authQS}&since=${since}`);
     const d=await r.json();
     if(d.ok&&d.items.length){
-      const seen=new Set(c.log.filter(e=>e.t==="result").map(e=>e.url));
+      // dedup BARCHA chatlar bo'yicha (inbox uid bo'yicha, bitta chat emas)
+      const seen=new Set();
+      CHATS.forEach(cc=>(cc.log||[]).forEach(e=>{ if(e.t==="result"&&e.url) seen.add(e.url); }));
       const fresh=d.items.filter(i=>!seen.has(i.url));
       if(fresh.length){
         hideEmpty();
@@ -1032,9 +1036,16 @@ micBtn.onclick=async()=>{
 };
 
 // ===== XABAR YUBORISH =====
-function sendMsg(extra){
+async function sendMsg(extra){
   const text=extra?.text??inp.value.trim();
   if((!text&&!extra&&!attachments.length)||busy)return;
+  // Rasm(lar) hali yuklanayotgan bo'lsa — TUGASHINI KUTAMIZ (referens yo'qolmasin)
+  if(!extra?.silent && attachments.some(a=>a.url==null)){
+    sendBtn.disabled=true; showTyping(VT.uploading);
+    let tries=0;
+    while(attachments.some(a=>a.url==null) && tries<80){ await new Promise(r=>setTimeout(r,250)); tries++; }
+    hideTyping(); sendBtn.disabled=false;
+  }
   hideEmpty();
   const atts=attachments.filter(a=>a.url).map(a=>a.url);
 
@@ -1084,7 +1095,7 @@ async function stream(payload){
           if(line.startsWith("event: "))ev=line.slice(7);
           if(line.startsWith("data: "))data=line.slice(6);
         }
-        if(data)handle(ev,JSON.parse(data));
+        if(data){ try{ handle(ev,JSON.parse(data)); }catch(_){/* buzuq freym — o'tkazib yuboramiz, oqim uzilmaydi */} }
       }
     }
   }catch(e){
@@ -1196,9 +1207,13 @@ function renderConfirm(d){
 // atlas-media (OSS) hotlink himoyasi tufayli rasm/video voro.uz proxy orqali
 // yuklanadi (same-origin) — Telegram/har qanday brauzerda HAR DOIM ko'rinadi.
 function mediaUrl(u){
-  try{ if(new URL(u).hostname.endsWith("aliyuncs.com"))
-        return API_BASE+"/img?u="+encodeURIComponent(u); }catch(e){}
-  return u;
+  try{
+    const url=new URL(u, location.href);
+    if(!/^https?:$/.test(url.protocol)) return "";   // javascript:/data: kabi sxemalar rad
+    if(url.hostname.endsWith("aliyuncs.com"))
+      return API_BASE+"/img?u="+encodeURIComponent(u);
+    return url.href;
+  }catch(e){ return ""; }
 }
 function renderResult(d){
   const src=mediaUrl(d.url);
