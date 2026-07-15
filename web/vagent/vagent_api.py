@@ -607,6 +607,33 @@ def _video_frame_cached(vurl: str):
 
 import threading
 _TRANSCODE_EVENTS: dict = {}   # final_path -> threading.Event (transcode tugaganda set bo'ladi)
+_TRANSCODE_SEM = threading.Semaphore(int(os.getenv("VAGENT_TRANSCODE_CONCURRENCY", "2")))  # bir vaqtda max N transcode
+
+# FAOL ISHLAR NAZORATI: per-user (sessiyalar bo'ylab) + GLOBAL (butun server) — Atlas'ni bosib ketmasin
+MAX_ACTIVE_JOBS_GLOBAL = int(os.getenv("VAGENT_MAX_GLOBAL_JOBS", "30"))
+_ACTIVE_JOBS: dict = {}   # uid -> faol ish soni
+_ACTIVE_TOTAL = [0]
+_ACTIVE_LOCK = threading.Lock()
+
+
+def _reserve_jobs(uid: str, n: int):
+    """Ish boshlashdan oldin joy band qilamiz. 'user'/'global'/None qaytaradi."""
+    with _ACTIVE_LOCK:
+        if _ACTIVE_TOTAL[0] + n > MAX_ACTIVE_JOBS_GLOBAL:
+            return "global"
+        if _ACTIVE_JOBS.get(uid, 0) + n > MAX_ACTIVE_JOBS_PER_USER:
+            return "user"
+        _ACTIVE_JOBS[uid] = _ACTIVE_JOBS.get(uid, 0) + n
+        _ACTIVE_TOTAL[0] += n
+        return None
+
+
+def _release_jobs(uid: str, n: int):
+    with _ACTIVE_LOCK:
+        _ACTIVE_JOBS[uid] = max(0, _ACTIVE_JOBS.get(uid, 0) - n)
+        if not _ACTIVE_JOBS[uid]:
+            _ACTIVE_JOBS.pop(uid, None)
+        _ACTIVE_TOTAL[0] = max(0, _ACTIVE_TOTAL[0] - n)
 
 
 def _probe_codec(path: str) -> str:
@@ -660,6 +687,11 @@ def _start_bg_transcode(src: str, out: str, remux: bool = False):
     _TRANSCODE_EVENTS[out] = ev
 
     def work():
+        # SEMAFOR: bir vaqtda max N transcode — 100 user birga video yuklasa CPU to'lib ketmasin
+        with _TRANSCODE_SEM:
+            _do_transcode()
+
+    def _do_transcode():
         try:
             ok = _remux_mp4(src, out) if remux else _transcode_h264(src, out)
             if ok:
@@ -1237,32 +1269,34 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
         jobs = inp.get("jobs", [])
         if not jobs:
             return {"error": "jobs bo'sh."}
-        if sess.active_jobs + len(jobs) > MAX_ACTIVE_JOBS_PER_USER:
-            return {"error": f"Limit: bir vaqtda max {MAX_ACTIVE_JOBS_PER_USER} ish. "
-                             f"Rejani {MAX_ACTIVE_JOBS_PER_USER} talik guruhlarga bo'ling."}
-
-        # narxlarni hisoblash va yechish (hammasi oldindan)
-        priced = []
-        for j in jobs:
-            p = calc_price(j["kind"], j["model"], j.get("resolution", "720p"),
-                           _safe_int(j.get("duration"), 5))
-            if p is None:
-                return {"error": f"'{j.get('label')}' uchun narx hisoblanmadi."}
-            if inp.get("is_iteration"):
-                p = max(1, int(p * FREE_ITERATION_DISCOUNT))
-            priced.append((j, p))
-
-        total = sum(p for _, p in priced)
-        if not deduct_credits(uid, total):
-            return {"error": _t(sess.lang, "balance_low", have=get_balance(uid), need=total)}
-
-        await emit("status", {"text": _t(sess.lang, "jobs_started", n=len(priced), total=total)})
-        sess.active_jobs += len(priced)
+        # BACKPRESSURE: per-user (sessiyalar bo'ylab) + GLOBAL limit — Atlas'ni bosib ketmasin
+        _resv = _reserve_jobs(uid, len(jobs))
+        if _resv == "user":
+            return {"error": f"Limit: bir vaqtda ko'pi bilan {MAX_ACTIVE_JOBS_PER_USER} ish. "
+                             f"Avvalgilari tugashini kuting."}
+        if _resv == "global":
+            return {"error": _t(sess.lang, "server_busy")}
         try:
+            # narxlarni hisoblash va yechish (hammasi oldindan)
+            priced = []
+            for j in jobs:
+                p = calc_price(j["kind"], j["model"], j.get("resolution", "720p"),
+                               _safe_int(j.get("duration"), 5))
+                if p is None:
+                    return {"error": f"'{j.get('label')}' uchun narx hisoblanmadi."}
+                if inp.get("is_iteration"):
+                    p = max(1, int(p * FREE_ITERATION_DISCOUNT))
+                priced.append((j, p))
+
+            total = sum(p for _, p in priced)
+            if not deduct_credits(uid, total):
+                return {"error": _t(sess.lang, "balance_low", have=get_balance(uid), need=total)}
+
+            await emit("status", {"text": _t(sess.lang, "jobs_started", n=len(priced), total=total)})
             results = await asyncio.gather(
                 *[_run_single_job(sess, j, p, emit) for j, p in priced])
         finally:
-            sess.active_jobs -= len(priced)
+            _release_jobs(uid, len(jobs))
 
         sess.last_jobs = jobs
         sess.pending_quote = None
@@ -1490,6 +1524,9 @@ _UI = {
     "api_busy": {"uz": "Hozir yuklama yuqori — bir ozdan keyin qayta urinib ko'ring 🙏",
                  "ru": "Сейчас высокая нагрузка — попробуйте через минуту 🙏",
                  "en": "High load right now — please try again in a moment 🙏"},
+    "server_busy": {"uz": "Server hozir band (ko'p generatsiya) — 1 daqiqadan keyin urinib ko'ring 🙏",
+                    "ru": "Сервер сейчас занят (много генераций) — попробуйте через минуту 🙏",
+                    "en": "Server is busy (many generations) — please try again in a minute 🙏"},
     "bad_image": {"uz": "Rasmni o'qib bo'lmadi — iltimos, boshqa rasm (JPG yoki PNG) yuboring.",
                   "ru": "Не удалось обработать изображение — пришлите другое (JPG или PNG).",
                   "en": "Couldn't read the image — please send another one (JPG or PNG)."},
@@ -1741,7 +1778,7 @@ async def vagent_chat(body: ChatIn):
         sess.refs_shown = False
         for url in _imgs:
             user_text += f"\n[BIRIKTIRILGAN RASM: {url}]"
-            _b64, _mt = _vision_b64(url)
+            _b64, _mt = await asyncio.get_event_loop().run_in_executor(None, _vision_b64, url)
             if _b64:
                 _content.append({"type": "image",
                                  "source": {"type": "base64", "media_type": _mt, "data": _b64}})
@@ -1751,7 +1788,7 @@ async def vagent_chat(body: ChatIn):
         user_text += f"\n[SUHBATDAGI RASM referens sifatida ishlatiladi: {', '.join(_sticky_refs)} — generatsiyada shu rasmni ASOS qil]"
         if not sess.refs_shown:                 # rebuild'dan keyin — agent rasmni bir marta ko'rsin
             for url in _sticky_refs:
-                _b64, _mt = _vision_b64(url)
+                _b64, _mt = await asyncio.get_event_loop().run_in_executor(None, _vision_b64, url)
                 if _b64:
                     _content.append({"type": "image",
                                      "source": {"type": "base64", "media_type": _mt, "data": _b64}})
@@ -1767,7 +1804,7 @@ async def vagent_chat(body: ChatIn):
             user_text += f"\n[BIRIKTIRILGAN VIDEO: {vurl} — foydalanuvchi VIDEO TAHRIR qilmoqchi bo'lishi mumkin]"
         # (a) videodan 1 kadr olib Claude'ga BIR MARTA ko'rsatamiz (kontekstni shishirmaslik uchun keshdan).
         # rebuild'dan keyin video_frame_shown=False bo'ladi → kadr qayta ko'rsatiladi (agent ko'radi).
-        _fb, _fm, _dur = _video_frame_cached(vurl)
+        _fb, _fm, _dur = await asyncio.get_event_loop().run_in_executor(None, _video_frame_cached, vurl)
         if _dur:
             sess.pending_video_dur = _dur
         if _fb and not sess.video_frame_shown:
@@ -1883,7 +1920,9 @@ async def vagent_upload(body: UploadIn):
         raw = base64.b64decode(body.data_b64)
     except Exception:
         return {"ok": False, "error": "base64 xato"}
-    return _save_upload(body.uid, raw, body.mime, getattr(body, "lang", "uz"))
+    # PIL/ffmpeg BLOKLOVCHI — event loop'ni to'xtatmasin (100 user uchun muhim)
+    return await asyncio.get_event_loop().run_in_executor(
+        None, _save_upload, body.uid, raw, body.mime, getattr(body, "lang", "uz"))
 
 
 @vagent_router.post("/upload-raw")
@@ -1897,7 +1936,8 @@ async def vagent_upload_raw(request: Request):
     if not verify_auth(uid, exp, sig):
         return {"ok": False, "error": "auth"}
     raw = await request.body()
-    return _save_upload(uid, raw, mime, lang)
+    # PIL/ffmpeg BLOKLOVCHI — thread pool'ga (event loop 100 user uchun bloklanmasin)
+    return await asyncio.get_event_loop().run_in_executor(None, _save_upload, uid, raw, mime, lang)
 
 
 @vagent_router.get("/file/{name}")
