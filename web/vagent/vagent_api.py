@@ -1137,9 +1137,9 @@ TOOLS = [
 # ============================================================
 
 _LANG_RULE = {
-    "uz": "Foydalanuvchi tanlagan interfeys tili — O'ZBEKCHA. DEFAULT: HAMMA javobни o'zbekcha (lotin) yoz. Faqat foydalanuvchi to'liq xabarni ANIQ boshqa tilda (ruscha yoki inglizcha) yozsagina o'sha tilга o't. Rasm biriktirса, qisqa yoki noaniq xabar bo'lsa — DOIM o'zbekcha. HECH QACHON tillarni ARALASHTIRMA: javobingdagi HAR bir so'z (present_options TUGMA yozuvlari va tasdiq matni ham) BITTA tilda bo'lsin.",
-    "ru": "Выбранный язык интерфейса — РУССКИЙ. ПО УМОЛЧАНИЮ отвечай на ВСЁ по-русски. Переходи на другой язык ТОЛЬКО если пользователь целым сообщением явно пишет на другом языке (узбекский-латиница или английский). Если прикреплено фото, сообщение короткое или неясное — ВСЕГДА по-русски. НИКОГДА не смешивай языки: КАЖДОЕ слово в ответе (включая надписи на кнопках present_options и текст подтверждения) на ОДНОМ языке.",
-    "en": "The selected interface language is ENGLISH. By DEFAULT reply to everything in English. Switch languages ONLY if the user writes a full message clearly in another language (Uzbek-latin or Russian). If a photo is attached, or the message is short or unclear — ALWAYS English. NEVER mix languages: every word in your reply (including present_options BUTTON labels and confirmation text) must be in ONE single language.",
+    "uz": "Foydalanuvchi tanlagan interfeys tili — O'ZBEKCHA. DEFAULT: HAMMA javobни o'zbekcha (lotin) yoz. Faqat foydalanuvchi to'liq xabarni ANIQ boshqa tilda (ruscha yoki inglizcha) yozsagina o'sha tilга o't. Rasm biriktirса, qisqa yoki noaniq xabar bo'lsa — DOIM o'zbekcha. HECH QACHON tillarni ARALASHTIRMA: javobingdagi HAR bir so'z (present_options TUGMA yozuvlari va tasdiq matni ham) BITTA tilda bo'lsin. MUOMALA: foydalanuvchiga DOIM hurmat bilan 'SIZ' deb murojaat qil — HECH QACHON 'sen' emas. Fe'llarni hurmat shaklida ishlat: 'yozing', 'ko'rasiz', 'tanlang', 'rasmingizni yuboring', 'xohlaysizmi', 'tayyor'. Iliq va samimiy, lekin hurmatli — professional xizmat kabi.",
+    "ru": "Выбранный язык интерфейса — РУССКИЙ. ПО УМОЛЧАНИЮ отвечай на ВСЁ по-русски. Переходи на другой язык ТОЛЬКО если пользователь целым сообщением явно пишет на другом языке (узбекский-латиница или английский). Если прикреплено фото, сообщение короткое или неясное — ВСЕГДА по-русски. НИКОГДА не смешивай языки: КАЖДОЕ слово в ответе (включая надписи на кнопках present_options и текст подтверждения) на ОДНОМ языке. ОБРАЩЕНИЕ: обращайся к пользователю ВСЕГДА на «ВЫ», НИКОГДА на «ты»: «напишите», «увидите», «выберите», «хотите ли вы», «пришлите фото». Тепло и дружелюбно, но уважительно — как профессиональный сервис.",
+    "en": "The selected interface language is ENGLISH. By DEFAULT reply to everything in English. Switch languages ONLY if the user writes a full message clearly in another language (Uzbek-latin or Russian). If a photo is attached, or the message is short or unclear — ALWAYS English. NEVER mix languages: every word in your reply (including present_options BUTTON labels and confirmation text) must be in ONE single language. TONE: address the user warmly but politely and respectfully — like a professional service.",
 }
 
 
@@ -1741,9 +1741,9 @@ async def claude_stream_turn(sess: Session, emit) -> None:
 # ============================================================
 # TIL: foydalanuvchiga ko'rinadigan HAR bir matn tanlangan tilda (aralashuv bo'lmasin)
 _UI = {
-    "jobs_started": {"uz": "⚙️ {n} ta ish boshlandi ({total} 🪙)",
-                     "ru": "⚙️ Запущено задач: {n} ({total} 🪙)",
-                     "en": "⚙️ {n} job(s) started ({total} 🪙)"},
+    "jobs_started": {"uz": "⚙️ {n} ta ish boshlandi ({total} ⚡)",
+                     "ru": "⚙️ Запущено задач: {n} ({total} ⚡)",
+                     "en": "⚙️ {n} job(s) started ({total} ⚡)"},
     "too_many_steps": {"uz": "So'rov juda murakkab — biroz soddalashtiring.",
                        "ru": "Запрос слишком сложный — упростите немного.",
                        "en": "The request is too complex — please simplify it."},
@@ -1778,9 +1778,9 @@ _UI = {
     "balance_low": {"uz": "Balans yetarli emas ({have} bor, {need} kerak).",
                     "ru": "Недостаточно баланса (есть {have}, нужно {need}).",
                     "en": "Not enough balance (have {have}, need {need})."},
-    "failed_refunded": {"uz": "Muvaffaqiyatsiz: {err}. {price} 🪙 qaytarildi.",
-                        "ru": "Не удалось: {err}. {price} 🪙 возвращено.",
-                        "en": "Failed: {err}. {price} 🪙 refunded."},
+    "failed_refunded": {"uz": "Muvaffaqiyatsiz: {err}. {price} ⚡ qaytarildi.",
+                        "ru": "Не удалось: {err}. {price} ⚡ возвращено.",
+                        "en": "Failed: {err}. {price} ⚡ refunded."},
     "job_fail": {"uz": "⚠️ {label}: {err}",
                  "ru": "⚠️ {label}: {err}",
                  "en": "⚠️ {label}: {err}"},
