@@ -22,5 +22,15 @@
     "seedance-2.0": "Eng kuchli video. Multi-referens (@image1 @video1 @audio1), motion transfer.",
     "kling-3.0": "Silliq harakat, realistik odamlar.",
     "veo-3.1": "Kinematik sifat, audio bilan."
+  },
+
+  "orchestration": {
+    "_izoh": "Claude (Sonnet) orkestratsiya token→tanga hisobi. enabled=false = KILL-SWITCH (deploysiz o'chirish). price_per_m: Sonnet 4.6 standart narx ($/1M token). Kunlik bepul: 1000 mc = 1 tanga.",
+    "enabled": true,
+    "model": "claude-sonnet-4-6",
+    "price_per_m": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
+    "coin_value_usd": 0.044,
+    "margin": 1.3,
+    "free_daily_mc": 1000
   }
 }

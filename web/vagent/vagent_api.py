@@ -117,6 +117,25 @@ def get_pricing_table() -> dict:
 def get_model_hints() -> dict:
     return _models_config()["hints"]
 
+def get_orch_config() -> dict:
+    """Orkestratsiya (Claude) token→tanga hisobi konfiguratsiyasi — vagent_models.json'dan
+    (hot-reload, deploysiz sozlanadi). Kalit yo'q bo'lsa XAVFSIZ default: enabled=False
+    (config buzuq/eski bo'lsa adashib pul yechilmaydi). KILL-SWITCH: enabled=false."""
+    d = _models_config().get("orchestration", {}) or {}
+    pr = d.get("price_per_m", {}) or {}
+    return {
+        "enabled": bool(d.get("enabled", False)),
+        "price": {
+            "input":       float(pr.get("input", 3.0)),
+            "output":      float(pr.get("output", 15.0)),
+            "cache_read":  float(pr.get("cache_read", 0.30)),
+            "cache_write": float(pr.get("cache_write", 3.75)),
+        },
+        "coin_value_usd": float(d.get("coin_value_usd", 0.044)),
+        "margin":         float(d.get("margin", 1.3)),
+        "free_daily_mc":  int(d.get("free_daily_mc", 1000)),
+    }
+
 # O'zbekiston bayram/mavsum kalendari — proaktiv g'oyalar uchun
 UZ_CALENDAR = [
     ((1, 1),  "Yangi yil"),
@@ -371,6 +390,86 @@ def chats_write(user_id: str, chats: list) -> None:
         box[str(user_id)] = merged
         return True
     _shard_update("vagent_chats_d", user_id, CHATS_JSON, fn)
+
+
+# ============================================================
+# ORKESTRATSIYA HISOBI — Claude (Sonnet) token xarajatini userga tangada o'tkazish.
+# Model C: kunlik BEPUL ulush (free_daily_mc) → undan keyin TOKEN-METER (millitanga
+# qarz akkumulyatori; 1000 mc = 1 tanga). Generatsiya turni BEPUL (tasdiq yo'li
+# deterministik — Claude umuman chaqirilmaydi; to'g'ridan generate qilса _gen_paid).
+# JIM ishlaydi (userga qo'rqinchli xabar yo'q; faqat balans hisoblagichi yangilanadi).
+# Holat per-user memory shardда: mem["orch"] = {debt_mc, used_today_mc, day}.
+# ============================================================
+
+def _today_str() -> str:
+    return time.strftime("%Y-%m-%d", time.localtime())
+
+def _orch_cost_mc(usage: dict, cfg: dict) -> int:
+    """Token usage → millitanga (marja bilan). in/out/cache_read/cache_write alohida narxda."""
+    p = cfg["price"]
+    usd = (usage.get("in", 0)  * p["input"]
+         + usage.get("out", 0) * p["output"]
+         + usage.get("cr", 0)  * p["cache_read"]
+         + usage.get("cw", 0)  * p["cache_write"]) / 1_000_000.0
+    mc = usd / max(cfg["coin_value_usd"], 1e-9) * 1000.0 * cfg["margin"]
+    return int(mc + 0.5)
+
+def orch_meter(uid: str, turn_mc: int, max_coins: int) -> int:
+    """Atomik (per-user shard): kunlik bepul ulush → qarz → yechiladigan BUTUN tanga soni.
+    max_coins: balansdan oshmasin (qarz faqat haqiqatan yechilgan qadar kamayadi)."""
+    cfg = get_orch_config()
+    free_daily = cfg["free_daily_mc"]
+    today = _today_str()
+    def fn(mem):
+        u = mem.setdefault(str(uid), {"facts": [], "name": "", "history": []})
+        o = u.setdefault("orch", {"debt_mc": 0, "used_today_mc": 0, "day": today})
+        if o.get("day") != today:                      # kun almashdi → bepul ulush reset
+            o["day"] = today
+            o["used_today_mc"] = 0
+        free_left = max(0, free_daily - int(o.get("used_today_mc", 0)))
+        o["used_today_mc"] = int(o.get("used_today_mc", 0)) + min(turn_mc, free_left)
+        o["debt_mc"] = int(o.get("debt_mc", 0)) + max(0, turn_mc - free_left)
+        coins = min(o["debt_mc"] // 1000, max(0, int(max_coins)))
+        o["debt_mc"] -= coins * 1000
+        return int(coins)
+    return _shard_update("vagent_memory_d", uid, MEMORY_JSON, fn)
+
+async def orch_allow(sess, emit) -> bool:
+    """Turn BOSHIDA guard: user bu turnни to'lay oladimi? balans>0 YOKI kunlik bepul ulush
+    qolgan. Aks holda muloyim 'to'ldiring' + False. enabled=False bo'lsa hamma o'tadi."""
+    cfg = get_orch_config()
+    if not cfg["enabled"]:
+        return True
+    uid = sess.user_id
+    if await _offload(get_balance, uid) > 0:
+        return True
+    mem = await _offload(memory_get, uid)
+    o = (mem.get("orch") or {})
+    used = int(o.get("used_today_mc", 0)) if o.get("day") == _today_str() else 0
+    if used < cfg["free_daily_mc"]:
+        return True
+    await emit("error", {"text": _t(getattr(sess, "lang", "uz"), "need_topup")})
+    return False
+
+async def orch_charge_turn(sess, emit, turn_usage: dict) -> None:
+    """Turn OXIRIDA: xarajatni hisoblab meterdan o'tkazadi va (jim) balansni yangilaydi.
+    Generatsiya turni bo'lsa (sess._gen_paid) — BEPUL (generatsiya marjasi qoplaydi)."""
+    cfg = get_orch_config()
+    if not cfg["enabled"] or getattr(sess, "_gen_paid", False):
+        return
+    turn_mc = _orch_cost_mc(turn_usage or {}, cfg)
+    if turn_mc <= 0:
+        return
+    uid = sess.user_id
+    bal = await _offload(get_balance, uid)
+    coins = await _offload(orch_meter, uid, turn_mc, bal)
+    _tu = turn_usage or {}
+    track(uid, "orch_charge", {"mc": turn_mc, "coins": coins,
+                               "in": _tu.get("in", 0), "out": _tu.get("out", 0),
+                               "cr": _tu.get("cr", 0), "cw": _tu.get("cw", 0)})
+    if coins > 0:
+        await _offload(deduct_credits, uid, coins)
+        await emit("balance", {"balance": await _offload(get_balance, uid)})
 
 
 def rebuild_messages(user_id: str, chat_id: str) -> list:
@@ -1336,6 +1435,7 @@ async def run_tool(name: str, inp: dict, sess: Session, emit) -> dict:
             total = sum(p for _, p in priced)
             if not deduct_credits(uid, total):
                 return {"error": _t(sess.lang, "balance_low", have=get_balance(uid), need=total)}
+            sess._gen_paid = True   # bu turn pulli generatsiya bilan tugadi → orkestratsiya BEPUL
 
             await emit("status", {"text": _t(sess.lang, "jobs_started", n=len(priced), total=total)})
             # return_exceptions=True: bir ish KUTILMAGAN xato bersa ham, boshqalari davom etadi +
@@ -1491,6 +1591,12 @@ async def claude_stream_turn(sess: Session, emit) -> None:
     _strip_url_images(sess.messages)     # eski natija-rasm URL'lari kontekstni zaharlamasin
     _sanitize_messages(sess.messages)    # yaroqli ketma-ketlik (birinchi xabar user)
 
+    # ORKESTRATSIYA HISOBI: butun turn (tool loop) bo'yicha token yig'iladi; oxirida
+    # worker orch_charge_turn bilan meterdan o'tkazadi. _gen_paid: pulli generatsiya
+    # bilan tugagan turn — orkestratsiyasi bepul (generatsiya marjasi qoplaydi).
+    sess._turn_usage = {"in": 0, "out": 0, "cr": 0, "cw": 0}
+    sess._gen_paid = False
+
     for _ in range(MAX_TURN_TOOL_LOOPS):
         assistant_blocks, tool_calls = [], []
         stop_reason = None
@@ -1549,7 +1655,12 @@ async def claude_stream_turn(sess: Session, emit) -> None:
                         continue
                     t = ev.get("type")
 
-                    if t == "content_block_start":
+                    if t == "message_start":
+                        _u = (ev.get("message") or {}).get("usage") or {}
+                        sess._turn_usage["in"] += _u.get("input_tokens", 0)
+                        sess._turn_usage["cr"] += _u.get("cache_read_input_tokens", 0)
+                        sess._turn_usage["cw"] += _u.get("cache_creation_input_tokens", 0)
+                    elif t == "content_block_start":
                         blk = ev["content_block"]
                         if blk["type"] == "tool_use":
                             cur_tool, cur_tool_json = {"id": blk["id"], "name": blk["name"]}, ""
@@ -1578,6 +1689,7 @@ async def claude_stream_turn(sess: Session, emit) -> None:
                             cur_text = ""
                     elif t == "message_delta":
                         stop_reason = ev.get("delta", {}).get("stop_reason")
+                        sess._turn_usage["out"] += (ev.get("usage") or {}).get("output_tokens", 0)
             finally:
                 if _cm is not None:
                     await _cm.__aexit__(None, None, None)
@@ -1633,6 +1745,9 @@ _UI = {
     "rate_limit": {"uz": "Juda tez yozayapsiz 🙂 Bir daqiqadan keyin davom etamiz.",
                    "ru": "Слишком быстро 🙂 Продолжим через минуту.",
                    "en": "You're typing too fast 🙂 Let's continue in a minute."},
+    "need_topup": {"uz": "Bugungi bepul suhbat ulushi tugadi 🙂 Davom etish uchun tangacha to'ldiring.",
+                   "ru": "Дневной бесплатный лимит общения исчерпан 🙂 Пополните монеты, чтобы продолжить.",
+                   "en": "Your free daily chat allowance is used up 🙂 Top up coins to continue."},
     "internal_error": {"uz": "Ichki xato yuz berdi. Qayta urinib ko'ring.",
                        "ru": "Произошла внутренняя ошибка. Попробуйте снова.",
                        "en": "An internal error occurred. Please try again."},
@@ -1954,9 +2069,11 @@ async def vagent_chat(body: ChatIn):
                 await _prepare()
                 if sess.run_confirmed:
                     sess.run_confirmed = False
-                    await run_confirmed_generation(sess, emit)
-                else:
+                    await run_confirmed_generation(sess, emit)   # deterministik — Claude yo'q, orkestratsiya bepul
+                elif await orch_allow(sess, emit):
+                    # ORKESTRATSIYA HISOBI: guard o'tsa turn ishlaydi, oxirida token→tanga meter
                     await claude_stream_turn(sess, emit)
+                    await orch_charge_turn(sess, emit, getattr(sess, "_turn_usage", None))
         except Exception:
             await emit("error", {"text": _t(getattr(sess, "lang", "uz"), "internal_error")})
         finally:
