@@ -1,0 +1,1 @@
+0 3 * * * root /opt/voro_backup.sh >> /var/log/voro_backup.log 2>&1
