@@ -414,9 +414,11 @@ def _orch_cost_mc(usage: dict, cfg: dict) -> int:
     mc = usd / max(cfg["coin_value_usd"], 1e-9) * 1000.0 * cfg["margin"]
     return int(mc + 0.5)
 
-def orch_meter(uid: str, turn_mc: int, max_coins: int) -> int:
+def orch_meter(uid: str, turn_mc: int, max_coins: int):
     """Atomik (per-user shard): kunlik bepul ulush → qarz → yechiladigan BUTUN tanga soni.
-    max_coins: balansdan oshmasin (qarz faqat haqiqatan yechilgan qadar kamayadi)."""
+    max_coins: balansdan oshmasin (qarz faqat haqiqatan yechilgan qadar kamayadi).
+    Qaytaradi: (coins, first) — first=True bo'lsa shu user BIRINCHI marta tanga to'ladi
+    (bir martalik muloyim izoh ko'rsatish uchun)."""
     cfg = get_orch_config()
     free_daily = cfg["free_daily_mc"]
     today = _today_str()
@@ -431,7 +433,11 @@ def orch_meter(uid: str, turn_mc: int, max_coins: int) -> int:
         o["debt_mc"] = int(o.get("debt_mc", 0)) + max(0, turn_mc - free_left)
         coins = min(o["debt_mc"] // 1000, max(0, int(max_coins)))
         o["debt_mc"] -= coins * 1000
-        return int(coins)
+        first = False
+        if coins > 0 and not o.get("noted"):           # birinchi tanga → bir martalik izoh
+            o["noted"] = True
+            first = True
+        return (int(coins), first)
     return _shard_update("vagent_memory_d", uid, MEMORY_JSON, fn)
 
 async def orch_allow(sess, emit) -> bool:
@@ -462,14 +468,16 @@ async def orch_charge_turn(sess, emit, turn_usage: dict) -> None:
         return
     uid = sess.user_id
     bal = await _offload(get_balance, uid)
-    coins = await _offload(orch_meter, uid, turn_mc, bal)
+    coins, first = await _offload(orch_meter, uid, turn_mc, bal)
     _tu = turn_usage or {}
     track(uid, "orch_charge", {"mc": turn_mc, "coins": coins,
                                "in": _tu.get("in", 0), "out": _tu.get("out", 0),
                                "cr": _tu.get("cr", 0), "cw": _tu.get("cw", 0)})
     if coins > 0:
         await _offload(deduct_credits, uid, coins)
-        await emit("balance", {"balance": await _offload(get_balance, uid)})
+        # JIM: balans yangilanadi + chip pulse; birinchi marta bo'lsa bir martalik izoh
+        await emit("balance", {"balance": await _offload(get_balance, uid),
+                               "pulse": True, "first_note": bool(first)})
 
 
 def rebuild_messages(user_id: str, chat_id: str) -> list:
