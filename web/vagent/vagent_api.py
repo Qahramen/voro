@@ -254,27 +254,65 @@ def refund_credits(user_id: str, amount: int) -> None:
     _locked_update(USERS_JSON, {}, fn)
 
 # ============================================================
+# PER-USER SHARD — har foydalanuvchi ma'lumoti ALOHIDA faylda.
+# Sabab: yagona vagent_chats.json/_memory.json/_inbox.json minglab userда
+# HAR yozishда BUTUN faylni qayta yozardi (O(barcha_user) + fsync). Endi faqat
+# shu user fayli yoziladi (O(1)). Eski yagona fayldan LAZY ko'chirish (birinchi
+# kirishда, bir marta). fn mantig'i O'ZGARMAYDI — shard ham {uid: data} shaklида.
+# ============================================================
+_SHARD_SEEDED: set = set()
+
+def _shard_path(kind: str, user_id: str) -> str:
+    safe = "".join(ch if (ch.isalnum() or ch in "._-") else "_"
+                   for ch in str(user_id))[:100] or "_"
+    return os.path.join(DATA_DIR, kind, safe + ".json")
+
+def _shard_seed(kind: str, user_id: str, legacy_file: str) -> None:
+    """Birinchi kirishда eski yagona fayldan shu user bo'lagini shardga ko'chiradi.
+    Shard mavjud bo'lsa — tegmaydi (restart'дан keyin ham ikki marta ko'chmaydi)."""
+    key = (kind, str(user_id))
+    if key in _SHARD_SEEDED:
+        return
+    try:
+        p = _shard_path(kind, user_id)
+        if not os.path.exists(p):
+            legacy = _locked_read(legacy_file, {}).get(str(user_id))
+            if legacy is not None:
+                _locked_write(p, {str(user_id): legacy})
+    except Exception:
+        pass
+    _SHARD_SEEDED.add(key)
+
+def _shard_read(kind: str, user_id: str, legacy_file: str) -> dict:
+    _shard_seed(kind, user_id, legacy_file)
+    return _locked_read(_shard_path(kind, user_id), {})
+
+def _shard_update(kind: str, user_id: str, legacy_file: str, fn):
+    _shard_seed(kind, user_id, legacy_file)
+    return _locked_update(_shard_path(kind, user_id), {}, fn)
+
+# ============================================================
 # DOIMIY XOTIRA
 # ============================================================
 
 def memory_get(user_id: str) -> dict:
-    return _locked_read(MEMORY_JSON, {}).get(
+    return _shard_read("vagent_memory_d", user_id, MEMORY_JSON).get(
         str(user_id), {"facts": [], "name": "", "history": []})
 
 def memory_add_fact(user_id: str, fact: str) -> None:
     def fn(mem):
         u = mem.setdefault(str(user_id), {"facts": [], "name": "", "history": []})
         if fact not in u["facts"]:
-            u["facts"] = (u["facts"] + [fact])[-40:]
+            u["facts"] = (u["facts"] + [fact])[-60:]     # og'ir akkaunt: 40→60 headroom
         return True
-    _locked_update(MEMORY_JSON, {}, fn)
+    _shard_update("vagent_memory_d", user_id, MEMORY_JSON, fn)
 
 def memory_log_job(user_id: str, entry: dict) -> None:
     def fn(mem):
         u = mem.setdefault(str(user_id), {"facts": [], "name": "", "history": []})
-        u["history"] = (u["history"] + [entry])[-25:]
+        u["history"] = (u["history"] + [entry])[-80:]    # 25→80 (prompt faqat -5 ko'radi, bloat yo'q)
         return True
-    _locked_update(MEMORY_JSON, {}, fn)
+    _shard_update("vagent_memory_d", user_id, MEMORY_JSON, fn)
 
 
 def memory_add_reaction(user_id: str, item: dict) -> None:
@@ -283,9 +321,9 @@ def memory_add_reaction(user_id: str, item: dict) -> None:
     raqobatchiga o'tish qimmatlashadi."""
     def fn(mem):
         u = mem.setdefault(str(user_id), {"facts": [], "name": "", "history": []})
-        u["taste"] = (u.get("taste", []) + [item])[-30:]
+        u["taste"] = (u.get("taste", []) + [item])[-60:]  # 30→60 (prompt'да yo'q — bepul)
         return True
-    _locked_update(MEMORY_JSON, {}, fn)
+    _shard_update("vagent_memory_d", user_id, MEMORY_JSON, fn)
 
 # ============================================================
 # INBOX — crash-recovery: SSE uzilsa ham natija shu yerda kutadi
@@ -297,10 +335,10 @@ def inbox_push(user_id: str, item: dict) -> None:
         lst.append({**item, "id": uuid.uuid4().hex[:10], "ts": int(time.time())})
         box[str(user_id)] = lst[-20:]
         return True
-    _locked_update(INBOX_JSON, {}, fn)
+    _shard_update("vagent_inbox_d", user_id, INBOX_JSON, fn)
 
 def inbox_pull(user_id: str, since_ts: int = 0) -> list:
-    box = _locked_read(INBOX_JSON, {})
+    box = _shard_read("vagent_inbox_d", user_id, INBOX_JSON)
     return [i for i in box.get(str(user_id), []) if i["ts"] > since_ts]
 
 
@@ -309,7 +347,7 @@ def inbox_pull(user_id: str, since_ts: int = 0) -> list:
 # ============================================================
 
 def chats_read(user_id: str) -> list:
-    return _locked_read(CHATS_JSON, {}).get(str(user_id), [])
+    return _shard_read("vagent_chats_d", user_id, CHATS_JSON).get(str(user_id), [])
 
 def chats_write(user_id: str, chats: list) -> None:
     def fn(box):
@@ -332,7 +370,7 @@ def chats_write(user_id: str, chats: list) -> None:
         merged = sorted(existing.values(), key=lambda x: int(x.get("ts", 0) or 0), reverse=True)[:30]
         box[str(user_id)] = merged
         return True
-    _locked_update(CHATS_JSON, {}, fn)
+    _shard_update("vagent_chats_d", user_id, CHATS_JSON, fn)
 
 
 def rebuild_messages(user_id: str, chat_id: str) -> list:
@@ -1002,7 +1040,7 @@ def build_system_prompt(user_id: str, lang: str = "uz") -> str:
     lang_rule = _LANG_RULE.get(lang, _LANG_RULE["uz"])
     lang_name = {"ru": "на русском", "en": "in English"}.get(lang, "o'zbekcha (lotin)")
     mem = memory_get(user_id)
-    facts = "\n".join(f"- {f}" for f in mem["facts"]) or "- (hali fakt yo'q)"
+    facts = "\n".join(f"- {f}" for f in mem["facts"][-50:]) or "- (hali fakt yo'q)"
     recent = "\n".join(
         f"- {h.get('label','?')} | {h.get('model','?')} | {h.get('price','?')} tangacha"
         for h in mem["history"][-5:]) or "- (hali ish yo'q)"
@@ -1458,30 +1496,49 @@ async def claude_stream_turn(sess: Session, emit) -> None:
         stop_reason = None
 
         async with httpx.AsyncClient(timeout=300) as client:
-            async with client.stream(
-                "POST", "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": ANTHROPIC_API_KEY,
-                         "anthropic-version": "2023-06-01",
-                         "content-type": "application/json"},
-                json={"model": ANTHROPIC_MODEL, "max_tokens": 3000,
-                      # PROMPT CACHING: system+tools STATIK prefiksi keshlanadi (~90% input token tejash).
-                      # Kesh order: tools → system → messages; system oxirgi blokiga cache_control qo'ysak
-                      # tools+system keshlanadi (har turn 12 chaqiruvga qadar qayta hisoblanmaydi).
-                      "system": [{"type": "text", "text": system,
-                                  "cache_control": {"type": "ephemeral"}}],
-                      "tools": TOOLS,
-                      "messages": sess.messages, "stream": True},
-            ) as resp:
-                if resp.status_code != 200:
-                    body = await resp.aread()
-                    _raw = (body.decode("utf-8", "ignore") if isinstance(body, (bytes, bytearray)) else str(body)).lower()
-                    print(f"[claude api {resp.status_code}] {str(body)[:300]}")   # xom xato faqat serverda log'da
-                    _lang = getattr(sess, "lang", "uz")
-                    # xom JSON/kodni EMAS — do'stona xabar ko'rsatamiz
-                    _msg = _t(_lang, "bad_image") if "image" in _raw else _t(_lang, "api_busy")
-                    await emit("error", {"text": _msg})
+            # PROMPT CACHING: system+tools STATIK prefiksi keshlanadi (~90% input tejash).
+            # system oxirgi blokiga cache_control → tools+system har turn qayta hisoblanmaydi.
+            _payload = {"model": ANTHROPIC_MODEL, "max_tokens": 3000,
+                        "system": [{"type": "text", "text": system,
+                                    "cache_control": {"type": "ephemeral"}}],
+                        "tools": TOOLS,
+                        "messages": sess.messages, "stream": True}
+            _hdrs = {"x-api-key": ANTHROPIC_API_KEY,
+                     "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"}
+            # RATE-LIMIT / OVERLOAD (429/529) yoki ulanish uzilishi — 100+ user birdaniga
+            # bo'lsa Anthropic vaqtincha rad etishi mumkin. Darrov xato KO'RSATMAYMIZ:
+            # eksponensial kutish bilan 4 marta qayta urinamiz (stream hali boshlanmagani
+            # uchun xavfsiz — matn ikki marta chiqmaydi).
+            _cm = None
+            for _att in range(4):
+                try:
+                    _cm = client.stream("POST", "https://api.anthropic.com/v1/messages",
+                                        headers=_hdrs, json=_payload)
+                    resp = await _cm.__aenter__()
+                except Exception as _ce:
+                    _cm = None
+                    print(f"[claude ulanish] urinish {_att+1}: {str(_ce)[:150]}")
+                    if _att < 3:
+                        await asyncio.sleep(min(1.5 * (2 ** _att), 8)); continue
+                    await emit("error", {"text": _t(getattr(sess, "lang", "uz"), "api_busy")})
                     return
-
+                if resp.status_code == 200:
+                    break
+                body = await resp.aread()
+                _raw = (body.decode("utf-8", "ignore") if isinstance(body, (bytes, bytearray)) else str(body)).lower()
+                print(f"[claude api {resp.status_code}] urinish {_att+1}: {str(body)[:200]}")
+                await _cm.__aexit__(None, None, None); _cm = None
+                if resp.status_code in (429, 500, 502, 503, 529) and _att < 3:
+                    _ra = resp.headers.get("retry-after", "")
+                    _wait = float(_ra) if _ra.replace(".", "", 1).isdigit() else min(1.5 * (2 ** _att), 8)
+                    await asyncio.sleep(_wait); continue
+                _lang = getattr(sess, "lang", "uz")
+                # xom JSON/kodni EMAS — do'stona xabar ko'rsatamiz
+                _msg = _t(_lang, "bad_image") if "image" in _raw else _t(_lang, "api_busy")
+                await emit("error", {"text": _msg})
+                return
+            try:
                 cur_text, cur_tool, cur_tool_json = "", None, ""
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
@@ -1521,6 +1578,9 @@ async def claude_stream_turn(sess: Session, emit) -> None:
                             cur_text = ""
                     elif t == "message_delta":
                         stop_reason = ev.get("delta", {}).get("stop_reason")
+            finally:
+                if _cm is not None:
+                    await _cm.__aexit__(None, None, None)
 
         if assistant_blocks:
             sess.messages.append({"role": "assistant", "content": assistant_blocks})
