@@ -960,6 +960,7 @@ IMAGE_MODELS = [
     {"id": "google/nano-banana-2/edit",                      "name": "🍌 Nano Banana 2"},
     {"id": "google/nano-banana-pro/edit",                    "name": "🍌 Nano Banana Pro"},
     {"id": "openai/gpt-image-2/text-to-image",              "name": "🤖 GPT Image 2"},
+    {"id": "openai/gpt-image-2/edit",                       "name": "🎨 GPT Image Ref"},
     {"id": "bytedance/seedream-v5.0-lite",                  "name": "🌸 Seedream 5.0"},
     {"id": "alibaba/wan-2.7/text-to-image",                 "name": "🌀 Wan 2.7 Image"},
     {"id": "alibaba/wan-2.7-pro/text-to-image",             "name": "🌀 Wan 2.7 Pro"},
