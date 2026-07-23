@@ -834,11 +834,11 @@ MODEL_META = {
     "openai/gpt-image-2/edit": {
         # Atlas GPT Image 2 edit endpoint — rasm(lar) asosida yangi rasm yaratadi (yuz saqlaydi)
         "badge": "💎 GPT-4o Edit", "refs": 16, "refs_req": True, "audio": False,
-        "resolutions": ["high"],           # narx hisoblash uchun (API ga resolution yuborilmaydi)
+        "resolutions": ["low", "medium", "high"],  # Atlas gpt-image-2 barcha sifat
         "ref_array_field": "images",       # API: "images" → array of URLs
-        "no_aspect_param": True,           # "size" extra_params orqali yuborilyapti
-        "no_resolution_param": True,       # "quality" extra_params orqali yuborilyapti
-        "extra_payload": {"input_fidelity": "high", "quality": "high"},  # ISHONCHLILIK: yuz/detal saqlash (Vagent isbot)
+        "no_aspect_param": True,           # referens edit: aspect YUBORILMAYDI (yuz saqlash)
+        "resolution_key": "quality",       # user tanlagan sifat -> API "quality" (low/medium/high)
+        "extra_payload": {"input_fidelity": "high"},  # ISHONCHLILIK: yuz/detal saqlash (Vagent isbot)
         "hook": "GPT Image 2 edit — reference rasmlar asosida yangi rasm, yuzni saqlaydi.",
         "best_for": "Video oblojka, yuz saqlash, matnli thumbnail",
     },
@@ -21140,7 +21140,7 @@ async def _atlas_submit_inner(model_id, prompt, aspect_ratio, resolution=None, d
     if resolution and not effective_meta.get("no_resolution_param"):
         # res_api_map: foydalanuvchi "1080p" tanlasa API "1080p-SR" oladi (Seedance Fast kabi)
         _res_api_map = effective_meta.get("res_api_map", {})
-        payload["resolution"] = _res_api_map.get(resolution, resolution)
+        payload[effective_meta.get("resolution_key", "resolution")] = _res_api_map.get(resolution, resolution)
     no_dur_param = effective_meta.get("no_dur_param", False)
     # MUHIM: duration > 0 shart — -1 yoki 0 hech qachon body'ga qo'shilmaydi.
     # Agar -1 yetib kelsa bu _do_generate'dagi mantiq xatosi — assertion tutib qoladi.
@@ -23428,6 +23428,11 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if get_user(uid).get("banned"):
         await q.answer(T("m_banned_short"), show_alert=True)
         return SELECT_CATEGORY
+
+    # VAGENT inline tugmalari (vg:o / vg:yes / vg:no) — per_message=False sabab state'da
+    # ishonchsiz; shuning uchun state'dan QAT'I NAZAR vagent_cb_handler'ga yo'naltiramiz.
+    if d and d.startswith("vg:"):
+        return await vagent_cb_handler(update, context)
 
     # ── Double-tap himoyasi (#3): generatsiya ketayotganda ikkinchi bosishni bloklash ──
     _GEN_CALLBACKS = {
