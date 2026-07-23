@@ -758,9 +758,14 @@ async def atlas_poll(atlas_id) -> dict:
 
     url = f"{b.ATLASCLOUD_BASE}/api/v1/model/prediction/{atlas_id}"
     headers = {"Authorization": f"Bearer {b.ATLASCLOUD_API_KEY}"}
-    async with httpx.AsyncClient(timeout=30) as cl:
-        r = await cl.get(url, headers=headers)
+    try:
+        async with httpx.AsyncClient(timeout=30) as cl:
+            r = await cl.get(url, headers=headers)
         data = r.json()
+    except Exception:
+        # TRANSIENT (502/503/HTML/timeout) — poll'ni TO'XTATMAYMIZ, job o'lmasin.
+        # Atlas ishlashda davom etadi; keyingi poll ushlaydi.
+        return {"status": "processing"}
 
     st = str((data.get("data") or {}).get("status", ""))
     if st in _done_statuses():
@@ -797,16 +802,27 @@ def set_job(job_id, **kw):
     q(f"UPDATE jobs SET {sets} WHERE id=?", (*kw.values(), job_id), commit=True)
 
 
-async def run_job(job_id):
-    job = q("SELECT * FROM jobs WHERE id=?", (job_id,), one=True)
-    if not job:
-        return
+async def _download_retry(job_id, url, jtype, tries=3):
+    """Yuklab olishni bir necha marta urinadi (transient tarmoq xatosi natijani yo'qotmasin)."""
+    last = None
+    for i in range(tries):
+        try:
+            return await download_result(job_id, url, jtype)
+        except Exception as e:
+            last = e
+            await asyncio.sleep(3 + i * 3)
+    raise last
+
+
+async def _finish_job(job_id, atlas_id, user_id, price, mid):
+    """atlas_id ni poll qilib natijani yetkazadi (yoki fail+refund).
+    MUHIM: fail'dan OLDIN Atlas'ni oxirgi marta tekshiradi — Atlas tugatgan bo'lsa
+    natijani BERAMIZ (transient poll xatosi/restart tufayli pul+natija yo'qolmasin).
+    run_job VA crash-recovery resume shuni ishlatadi."""
+    jtype = (get_model(mid) or {}).get("type", "video")
+    deadline = time.time() + 900  # maks 15 daqiqa
+    prog = 15
     try:
-        set_job(job_id, status="processing", progress=8)
-        atlas_id = await atlas_submit(job)
-        set_job(job_id, atlas_id=atlas_id, progress=15)
-        deadline = time.time() + 900  # maks 15 daqiqa
-        prog = 15
         while time.time() < deadline:
             await asyncio.sleep(4)
             st = await atlas_poll(atlas_id)
@@ -814,7 +830,7 @@ async def run_job(job_id):
                 if not st.get("output_url"):
                     raise RuntimeError("Natija URL topilmadi")
                 set_job(job_id, progress=95)
-                local = await download_result(job_id, st["output_url"], (get_model(job["mid"]) or {}).get("type", "video"))
+                local = await _download_retry(job_id, st["output_url"], jtype)
                 set_job(job_id, status="done", progress=100, result_url=local)
                 return
             if st["status"] == "failed":
@@ -823,8 +839,37 @@ async def run_job(job_id):
             set_job(job_id, progress=prog)
         raise TimeoutError("Vaqt tugadi (15 daqiqa)")
     except Exception as e:
+        # SAFETY NET: fail'dan oldin Atlas'ni oxirgi marta tekshiramiz.
+        # Agar Atlas tugatgan bo'lsa — natijani beramiz (pul+natija yo'qolmasin).
+        for _ in range(6):
+            try:
+                st = await atlas_poll(atlas_id)
+                if st.get("status") == "done" and st.get("output_url"):
+                    local = await _download_retry(job_id, st["output_url"], jtype)
+                    set_job(job_id, status="done", progress=100, result_url=local)
+                    return
+                if st.get("status") == "failed":
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(5)
+        refund(user_id, price)
+        set_job(job_id, status="failed", error=str(e)[:200])
+
+
+async def run_job(job_id):
+    job = q("SELECT * FROM jobs WHERE id=?", (job_id,), one=True)
+    if not job:
+        return
+    try:
+        set_job(job_id, status="processing", progress=8)
+        atlas_id = await atlas_submit(job)
+        set_job(job_id, atlas_id=atlas_id, progress=15)
+    except Exception as e:
         refund(job["user_id"], job["price"])
         set_job(job_id, status="failed", error=str(e)[:200])
+        return
+    await _finish_job(job_id, atlas_id, job["user_id"], job["price"], job["mid"])
 
 
 # ────────────────────────── APP ──
@@ -856,10 +901,21 @@ async def startup():
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     init_db()
     # Crash-recovery: server o'chib qolganda osilib qolgan ishlar -> failed + refund
-    stuck = q("SELECT id, user_id, price FROM jobs WHERE status IN ('queued','processing')")
+    stuck = q("SELECT id, user_id, price, atlas_id, mid FROM jobs WHERE status IN ('queued','processing')")
     for j in stuck:
-        refund(j["user_id"], j["price"])
-        set_job(j["id"], status="failed", error="Server qayta ishga tushdi — tangacha qaytarildi")
+        _aid = None
+        try:
+            _aid = j["atlas_id"]
+        except Exception:
+            _aid = None
+        if _aid:
+            # Atlas'da DAVOM etyapti — fail EMAS, RESUME (poll qilib natijani yetkazamiz).
+            # Restart natijani yo'qotmasin; Atlas tugatgan bo'lsa user oladi.
+            asyncio.create_task(_finish_job(j["id"], _aid, j["user_id"], j["price"], j["mid"]))
+        else:
+            # hech submit qilinmagan (atlas_id yo'q) — fail+refund
+            refund(j["user_id"], j["price"])
+            set_job(j["id"], status="failed", error="Server qayta ishga tushdi — tangacha qaytarildi")
 
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR), check_dir=False), name="uploads")
